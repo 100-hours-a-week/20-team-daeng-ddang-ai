@@ -1,28 +1,22 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Path
+from fastapi import APIRouter
 
-from app.schemas.mission_schema import ApiResponse, MissionAnalysisData, MissionAnalysisRequest
-from app.services.mission_service import analyze_sync_mock, now_iso
+from app.schemas.mission_schema import MissionAnalysisData, MissionAnalysisRequest
+from app.services.mission_service import analyze_sync, now_iso
 
-router = APIRouter(prefix = "/internal/v1", tags = ["mission"])
+router = APIRouter(prefix = "/api/missions", tags = ["mission"])
 
 
-@router.post("/walks/{walkId}/missions/analysis", response_model = ApiResponse)
-def analyze_missions_sync(
+@router.post("/judge", response_model=MissionAnalysisData)
+def analyze_missions_judge(
     req: MissionAnalysisRequest,
-    walkId: int = Path(..., ge=1),
 ):
-    results = analyze_sync_mock(req.missions)
-
-    data = MissionAnalysisData(
-        walkId = walkId,
-        analyzedAt = now_iso(),
+    results = analyze_sync(req.missions)
+    
+    return MissionAnalysisData(
+        analysis_id = req.analysis_id,
+        walk_id = req.walk_id,
+        analyzed_at = now_iso(),
         missions = results,
-    )
-
-    return ApiResponse(
-        message = "mission analysis completed",
-        data = data.model_dump(),
-        errorCode = None,
     )

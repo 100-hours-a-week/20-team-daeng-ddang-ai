@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field
 
 
 class ApiResponse(BaseModel):
@@ -26,27 +26,26 @@ class MissionStatus(str, Enum):
 
 
 class MissionInput(BaseModel):
-    missionRecordId: int = Field(..., ge = 1)
-    missionId: int = Field(..., ge = 1)
-    missionType: MissionType
-    missionVideoUrl: HttpUrl
-    title: Optional[str] = None
+    mission_id: str
+    mission_type: MissionType
+    video_url: str
 
 
 class MissionAnalysisRequest(BaseModel):
+    analysis_id: str
+    walk_id: str
     missions: List[MissionInput] = Field(..., min_length = 1)
 
 
 class MissionResult(BaseModel):
-    missionRecordId: int
-    missionId: int
-    title: str
-    status: MissionStatus
+    mission_id: str
+    mission_type: MissionType
+    success: bool
     confidence: float = Field(..., ge = 0.0, le = 1.0)
-    message: str
 
 
 class MissionAnalysisData(BaseModel):
-    walkId: int
-    analyzedAt: str
+    analysis_id: str
+    walk_id: str
+    analyzed_at: str
     missions: List[MissionResult]

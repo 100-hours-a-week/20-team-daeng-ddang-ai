@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import List
 
-from app.schemas.mission_schema import MissionResult, MissionStatus, MissionType, MissionInput
+from app.schemas.mission_schema import MissionResult, MissionType, MissionInput
+from app.services.gemini_client import GeminiClient
+from app.services.prompts.mission_judge import build_prompt
+
+gemini_client = GeminiClient()
+
+logger = logging.getLogger(__name__)
 
 def default_title(mission_type: MissionType) -> str:
     return {
@@ -18,28 +25,52 @@ def analyze_sync_mock(missions: List[MissionInput]) -> List[MissionResult]:
     results: List[MissionResult] = []
 
     for m in missions:
-        title = m.title or default_title(m.missionType)
+        is_success = m.mission_type in {MissionType.SIT, MissionType.PAW}
+        
+        results.append(
+            MissionResult(
+                mission_id = m.mission_id,
+                mission_type = m.mission_type,
+                success = is_success,
+                confidence = 0.92 if is_success else 0.61
+            )
+        )
 
-        if m.missionType in {MissionType.SIT, MissionType.PAW}:
+    return results
+
+def analyze_sync(missions: List[MissionInput]) -> List[MissionResult]:
+    results: List[MissionResult] = []
+
+    for m in missions:
+        try:
+            prompt = build_prompt(m.mission_type.value)
+            
+            result_json = gemini_client.call_gemini_judge(
+                video_url = m.video_url,
+                prompt = prompt
+            )
+            
+            success = result_json.get("success", False)
+            confidence = result_json.get("confidence", 0.0)
+            
             results.append(
                 MissionResult(
-                    missionRecordId = m.missionRecordId,
-                    missionId = m.missionId,
-                    title = title,
-                    status = MissionStatus.SUCCESS,
-                    confidence = 0.92,
-                    message = "지시에 맞춰 동작을 수행했습니다. (mock)",
+                    mission_id = m.mission_id,
+                    mission_type = m.mission_type,
+                    success = success,
+                    confidence = confidence
                 )
             )
-        else:
+            
+        except Exception as e:
+            logger.error(f"Mission Analysis Failed for {m.mission_id}: {e}")
+
             results.append(
                 MissionResult(
-                    missionRecordId = m.missionRecordId,
-                    missionId = m.missionId,
-                    title = title,
-                    status = MissionStatus.FAIL,
-                    confidence = 0.61,
-                    message="요구된 동작으로 보기에는 부족했습니다. (mock)",
+                    mission_id = m.mission_id,
+                    mission_type = m.mission_type,
+                    success = False,
+                    confidence = 0.0
                 )
             )
 
