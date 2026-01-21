@@ -1,78 +1,53 @@
 import os
-import json
-import time
-import tempfile
 import requests
-import google.generativeai as genai
-from typing import Dict, Any, Optional
+from typing import Optional
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+from google import genai
+from google.genai import types
 
 class GeminiClient:
     def __init__(self, model_name: str = "gemini-2.5-flash"):
-        if not GEMINI_API_KEY:
-            raise ValueError("GEMINI_API_KEY is not set in environment variables.")
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY (or GOOGLE_API_KEY) is not set in environment variables.")
 
         self.model_name = model_name
-        self.model = genai.GenerativeModel(model_name)
+        self.client = genai.Client(api_key=api_key)
 
-    def _download_video(self, video_url: str) -> str:
-        try:
-            with tempfile.NamedTemporaryFile(delete = False, suffix = ".mp4") as tmp_file:
-                response = requests.get(video_url, stream = True, timeout = 30)
-                response.raise_for_status()
-
-                for chunk in response.iter_content(chunk_size = 8192):
-                    tmp_file.write(chunk)
-
-                return tmp_file.name
-
-        except Exception as e:
-            raise RuntimeError(f"Failed to download video from {video_url}: {e}")
-
-    def call_gemini_judge(self, video_url: str, prompt: str) -> Dict[str, Any]:
-        video_path = None
-        upload_file = None
-
-        try:
-            video_path = self._download_video(video_url)
-            upload_file = genai.upload_file(video_path)
-            
-            start_time = time.time()
-            timeout_seconds = 60
-
-            while upload_file.state.name == "PROCESSING":
-                if time.time() - start_time > timeout_seconds:
-                    raise TimeoutError("Gemini file processing timed out.")
-                    
-                time.sleep(1)
-                upload_file = genai.get_file(upload_file.name)
-            
-            if upload_file.state.name == "FAILED":
-                raise RuntimeError("Gemini file upload failed processing.")
-
-            response = self.model.generate_content(
-                [upload_file, prompt],
-                generation_config = {"response_mime_type": "application/json"}
-            )
-            
+    def generate_from_video_url(self, video_url: str, prompt_text: str) -> str:
+        """
+        Generates content using Gemini.
+        - If URL is local (localhost/127.0.0.1), downloads bytes and sends inline.
+        - If URL is public, sends URL directly to Gemini.
+        """
+        is_local = "localhost" in video_url or "127.0.0.1" in video_url
+        
+        parts = []
+        
+        if is_local:
             try:
-                result = json.loads(response.text)
-                return result
-            except json.JSONDecodeError:
-                raise ValueError(f"Failed to parse JSON from Gemini response: {response.text}")
+                r = requests.get(video_url, timeout=30)
+                r.raise_for_status()
+                parts = [
+                    types.Part.from_bytes(data=r.content, mime_type="video/mp4"),
+                    types.Part.from_text(text=prompt_text),
+                ]
+            except Exception as e:
+                raise RuntimeError(f"Failed to fetch local video: {e}")
+        else:
+            parts = [
+                types.Part.from_uri(
+                    file_uri=video_url,
+                    mime_type="video/mp4"
+                ),
+                types.Part.from_text(text=prompt_text),
+            ]
 
-        except Exception as e:
-            raise e
-            
-        finally:
-            if video_path and os.path.exists(video_path):
-                os.remove(video_path)
-            
-            if upload_file:
-                try:
-                    genai.delete_file(upload_file.name)
-                except:
-                    pass
+        resp = self.client.models.generate_content(
+            model=self.model_name,
+            contents=[types.Content(parts=parts)],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json"
+            )
+        )
+        return resp.text or ""

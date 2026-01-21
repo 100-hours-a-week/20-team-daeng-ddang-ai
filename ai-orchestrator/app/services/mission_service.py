@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+import json
 from typing import List
 
 from app.schemas.mission_schema import MissionResult, MissionType, MissionInput
@@ -45,10 +46,12 @@ def analyze_sync(missions: List[MissionInput]) -> List[MissionResult]:
         try:
             prompt = build_prompt(m.mission_type.value)
             
-            result_json = gemini_client.call_gemini_judge(
-                video_url = m.video_url,
-                prompt = prompt
+            result_text = gemini_client.generate_from_video_url(
+                video_url=m.video_url,
+                prompt_text=prompt
             )
+            
+            result_json = json.loads(result_text)
             
             success = result_json.get("success", False)
             confidence = result_json.get("confidence", 0.0)
