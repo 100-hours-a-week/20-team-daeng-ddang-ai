@@ -25,6 +25,8 @@ def test_judge():
         {"url": "https://daeng-map.s3.ap-northeast-2.amazonaws.com/paw.mp4", "mission": "PAW"},
         {"url": "https://daeng-map.s3.ap-northeast-2.amazonaws.com/sit_small.mp4", "mission": "SIT"},
         {"url": "https://daeng-map.s3.ap-northeast-2.amazonaws.com/spin.mp4", "mission": "TURN"},
+        {"url": "https://daeng-map.s3.ap-northeast-2.amazonaws.com/IMG_6135.mov", "mission": "DOWN"},
+        {"url": "https://daeng-map.s3.ap-northeast-2.amazonaws.com/IMG_6137.mov", "mission": "DOWN"},
     ]
 
     print(f"[Test] Starting sequential test for {len(test_cases)} videos...\n")
