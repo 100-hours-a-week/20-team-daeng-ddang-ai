@@ -1,6 +1,7 @@
 from typing import List, Optional
 from pydantic import BaseModel
 
+# 미션별 판정 기준 데이터 (추후 DB로 이관 가능)
 MISSION_REFERENCE_STORE_DATA = {
     "version": "v1",
     "missions": {
@@ -25,7 +26,7 @@ MISSION_REFERENCE_STORE_DATA = {
             "mission_name": "엎드려",
             "success_criteria": [
                 "반려견의 가슴과 배가 모두 지면에 닿아 있고, 앞다리가 접힌 상태로 바닥에 놓인 자세가 확인됨",
-                "카메라 각도상 가슴 전체가 명확히 보이지 않더라도, 몸통이 낮고 엎드린 자세가 분명함"
+                "카메라 각도상 가슴 전체가 명확히 보이지 않더라도, 몸통이 낮고 엎드린 자세가 분명함",
                 "해당 자세가 최소 2초 이상 유지됨",
                 "정확한 초 단위 측정이 어렵더라도, 엎드린 상태가 명확히 지속되는 흐름이 보임"
             ],
@@ -58,7 +59,7 @@ MISSION_REFERENCE_STORE_DATA = {
                 "회전 각도가 매우 작음",
                 "우연한 방향 전환으로 보임",
                 "회전 동작이 끊기거나 부분적임",
-                "고개만 돌리림"
+                "고개만 돌림"
             ]
         },
         "JUMP": {
@@ -89,6 +90,7 @@ def get_mission_criteria(mission_type: str) -> Optional[MissionCriteria]:
         return MissionCriteria(**data)
     return None
 
+# Gemini에게 보낼 시스템 프롬프트 템플릿
 PROMPT_TEMPLATE = """
 당신은 반려견 훈련 영상을 판정하는 AI 심판입니다.
 주어진 짧은 영상에 나타난 시각적 정보만을 사용하여,
@@ -128,20 +130,29 @@ PROMPT_TEMPLATE = """
 아래 JSON 형식만 출력하십시오.
 JSON 외의 텍스트는 절대 출력하지 마십시오.
 
+- reason은 1~2문장으로 간결하게 작성하십시오.
+- reason에는 판정에 결정적이었던 "시각적 근거"만 포함하십시오.
+- 음성/명령/의도/칭찬/간식 등 오디오 기반 추정은 쓰지 마십시오.
+- 반려견이 보이지 않거나 동작이 확인 불가하면 그 사실을 reason에 명시하십시오.
+
 {{
   "success": boolean,
-  "confidence": number
+  "confidence": number,
+  "reason": string
 }}
 """
 def build_prompt(mission_type: str) -> str:
+    # 미션 타입에 해당하는 기준을 조회
     criteria = get_mission_criteria(mission_type)
 
     if not criteria:
         raise ValueError(f"Unknown mission type: {mission_type}")
 
+    # 리스트 형태의 기준들을 줄바꿈 문자로 연결
     success_list = "\n".join([f"- {item}" for item in criteria.success_criteria])
     failure_list = "\n".join([f"- {item}" for item in criteria.failure_criteria])
 
+    # 템플릿에 데이터 주입하여 최종 프롬프트 생성
     return PROMPT_TEMPLATE.format(
         mission_type=criteria.mission_type,
         mission_name=criteria.mission_name,

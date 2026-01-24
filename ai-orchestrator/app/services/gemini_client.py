@@ -1,18 +1,20 @@
+# app/services/gemini_client.py
 import os
-import requests
 from typing import Optional
-
 from google import genai
 from google.genai import types
 
 class GeminiClient:
     def __init__(self, model_name: str = "gemini-2.5-flash"):
+        # API 키 로드 (GEMINI_API_KEY 또는 GOOGLE_API_KEY 모두 지원)
         api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not api_key:
-            raise ValueError("GEMINI_API_KEY (or GOOGLE_API_KEY) is not set in environment variables.")
+            raise ValueError("GEMINI_API_KEY or GOOGLE_API_KEY is not set in environment variables.")
 
         self.model_name = model_name
         self.client = genai.Client(api_key=api_key)
+        
+        # 판정 결과용 JSON 스키마 정의 (Gemini가 이 구조에 맞춰 응답하도록 강제)
         self._judgment_schema = types.Schema(
             type = types.Type.OBJECT,
             required = ["success", "confidence", "reason"],
@@ -42,42 +44,60 @@ class GeminiClient:
     ) -> str:
         """
         Generates content using Gemini.
-        - If URL is local (localhost/127.0.0.1), downloads bytes and sends inline.
-        - If URL is public, sends URL directly to Gemini.
+        - URL is sent directly to Gemini (S3 etc).
         """
-        is_local = "localhost" in video_url or "127.0.0.1" in video_url
-        
-        parts = []
-        
-        if is_local:
-            try:
-                r = requests.get(video_url, timeout=30)
-                r.raise_for_status()
-                parts = [
-                    types.Part.from_bytes(data=r.content, mime_type="video/mp4"),
-                    types.Part.from_text(text=prompt_text),
-                ]
-            except Exception as e:
-                raise RuntimeError(f"Failed to fetch local video: {e}")
-        else:
-            parts = [
-                types.Part.from_uri(
-                    file_uri=video_url,
-                    mime_type="video/mp4"
-                ),
-                types.Part.from_text(text=prompt_text),
-            ]
+        # Production 환경에서는 S3 URL을 그대로 Gemini에 넘깁니다.
+        parts = [
+            types.Part.from_uri(
+                file_uri=video_url,
+                mime_type="video/mp4"
+            ),
+            types.Part.from_text(text=prompt_text),
+        ]
 
+        # 응답 설정 (MIME 타입 및 JSON 스키마 적용)
         config_kwargs = {"response_mime_type": response_mime_type}
         if response_schema is not None:
             config_kwargs["response_schema"] = response_schema
 
+        # 실제 Gemini API 호출 (동기)
         resp = self.client.models.generate_content(
             model=self.model_name,
             contents=[types.Content(parts=parts)],
             config=types.GenerateContentConfig(**config_kwargs)
         )
         return resp.text or ""
+
+    # --- 비동기 확장용 (Async Expansion) ---
+    # async def generate_from_video_url_async(
+    #     self,
+    #     video_url: str,
+    #     prompt_text: str,
+    #     *,
+    #     response_mime_type: str = "application/json",
+    #     response_schema: Optional[types.Schema] = None,
+    # ) -> str:
+    #     parts = [
+    #         types.Part.from_uri(
+    #             file_uri=video_url,
+    #             mime_type="video/mp4"
+    #         ),
+    #         types.Part.from_text(text=prompt_text),
+    #     ]
+    #
+    #     config_kwargs = {"response_mime_type": response_mime_type}
+    #     if response_schema is not None:
+    #         config_kwargs["response_schema"] = response_schema
+    #
+    #     # google.genai Client의 비동기 지원 여부에 따라 구현이 달라질 수 있습니다.
+    #     # 만약 aio 모듈이 있다면:
+    #     resp = await self.client.aio.models.generate_content(
+    #         model=self.model_name,
+    #         contents=[types.Content(parts=parts)],
+    #         config=types.GenerateContentConfig(**config_kwargs)
+    #     )
+    #     return resp.text or ""
+    # -------------------------------------
 
     def generate_judgment_from_video_url(self, video_url: str, prompt_text: str) -> str:
         return self.generate_from_video_url(
@@ -86,6 +106,7 @@ class GeminiClient:
             response_schema = self._judgment_schema,
         )
 
+    # 단순히 텍스트만 생성하는 메서드 (스키마 없이 사용)
     def generate_text_from_video_url(self, video_url: str, prompt_text: str) -> str:
         return self.generate_from_video_url(
             video_url = video_url,
