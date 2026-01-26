@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging, json
 from datetime import datetime
 from typing import List
+from app.core.config import DEBUG
 from app.schemas.mission_schema import MissionResult, MissionInput
 from app.services.gemini_client import GeminiClient
 from app.services.prompts.mission_judge import build_prompt
@@ -51,7 +52,7 @@ def analyze_sync(missions: List[MissionInput]) -> List[MissionResult]:
                     mission_type = m.mission_type,
                     success = success,
                     confidence = confidence,
-                    reason = reason
+                    reason = reason if DEBUG else None
                 )
             )
             

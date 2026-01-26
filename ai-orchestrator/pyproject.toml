@@ -1,0 +1,33 @@
+[tool.ruff]
+# User request: Width 100 (Balanced readability)
+line-length = 100
+# Target Environment: Python 3.13
+target-version = "py313"
+
+[tool.ruff.lint]
+# Combined Selection:
+# E, F: Standard Linter (Pycodestyle, Pyflakes)
+# I: Import Sorting (isort) - Essential
+# UP: Upgrade Syntax (pyupgrade) - Modern Python
+# B: Bugbear (Potential Bugs) - Safety
+# N: Naming (PEP8 Naming) - Consistency (Added recommendation)
+# SIM: Simplify (Code simplification) - Readability (Added recommendation)
+select = ["E", "F", "I", "UP", "B", "N", "SIM"]
+
+# Ignore lists can be added here if specific rules get annoying
+ignore = []
+
+# Allow autofix for all enabled rules
+fixable = ["ALL"]
+unfixable = []
+
+[tool.ruff.format]
+# Standard formatting options
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint.isort]
+# Best practice import sorting sections
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]

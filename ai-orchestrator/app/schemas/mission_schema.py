@@ -41,7 +41,7 @@ class MissionResult(BaseModel):
     mission_type: MissionType
     success: bool        # 성공 여부
     confidence: float = Field(..., ge = 0.0, le = 1.0) # AI 신뢰도 (0.0 ~ 1.0)
-    reason: str = Field(default = "", description = "Explanation for the mission judgment") # 판정 이유
+    reason: Optional[str] = Field(default = None, description = "Explanation (only in debug mode)") # 판정 이유 (디버그용)
 
 # 전체 분석 결과 응답
 class MissionAnalysisData(BaseModel):

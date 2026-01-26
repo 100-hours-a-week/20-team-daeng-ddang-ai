@@ -45,3 +45,12 @@ uritemplate==4.2.0
 urllib3==2.6.3
 uvicorn==0.40.0
 websockets==15.0.1
+# Face Analysis Dependencies
+ultralytics
+transformers
+timm
+torch
+torchvision
+huggingface_hub
+opencv-python-headless
+pillow

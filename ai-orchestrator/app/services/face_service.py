@@ -8,11 +8,14 @@ from app.core.config import FACE_MODE
 from app.schemas.face_schema import FaceAnalyzeRequest, FaceAnalyzeResponse
 from app.services.adapters.face_mock_adapter import FaceMockAdapter
 from app.services.adapters.face_http_adapter import FaceHttpAdapter
+from app.services.adapters.face_local_adapter import FaceLocalAdapter
 from app.services.adapters.face_adapter import FaceAdapter
 
 def _select_adapter() -> FaceAdapter:
     if FACE_MODE == "http":
         return FaceHttpAdapter()
+    elif FACE_MODE == "local":
+        return FaceLocalAdapter()
     return FaceMockAdapter()
 
 def analyze_face_sync(req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
