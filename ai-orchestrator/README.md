@@ -78,6 +78,12 @@ python app/services/mission_judge_02.py
 ```
 
 ### 2. 표정 분석 테스트 (Face Analysis)
+#### 로컬 스크립트 테스트 (서버 실행 X)
+서버를 띄우지 않고 로직(모델 추론 포함)만 바로 테스트하고 싶을 때 사용합니다.
+```bash
+python scripts/test_face_local.py <VIDEO_URL>
+```
+
 #### API 테스트 (cURL)
 서버 실행 후 직접 요청을 보내 테스트합니다.
 
