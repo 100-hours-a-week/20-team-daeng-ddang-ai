@@ -71,10 +71,17 @@ python run_face_server.py
 ## 테스트 (Testing)
 
 ### 1. 돌발 미션 테스트 (Mission E2E)
-실제 비디오 파일(`test_data/`)을 사용하여 Gemini 연동을 테스트합니다.
+#### 배치 테스트 (기본 제공 영상)
+내부 테스트 데이터(`test_cases`)를 사용하여 일괄 테스트합니다.
 ```bash
-# 스크립트 실행 (내부적으로 test_data 폴더의 영상을 사용)
-python app/services/mission_judge_02.py
+python scripts/test_judge_e2e.py
+```
+
+#### 로컬 스크립트 테스트 (개별)
+원하는 비디오와 미션 타입을 지정하여 테스트합니다.
+```bash
+python scripts/test_mission_local.py <MISSION_TYPE> <VIDEO_URL>
+# 예시: python scripts/test_mission_local.py SIT https://example.com/sit.mp4
 ```
 
 ### 2. 표정 분석 테스트 (Face Analysis)
