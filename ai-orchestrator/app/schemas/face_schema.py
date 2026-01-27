@@ -11,12 +11,14 @@ class FaceAnalyzeRequest(BaseModel):
 
 class FaceAnalyzeResponse(BaseModel):
     analysis_id: str
-    analyze_at: str
-    processing: Dict[str, Any]
-    result: Dict[str, Any] # "emotion": { ... }
+    predicted_emotion: str
+    confidence: float
+    summary: str
+    emotion_probabilities: Dict[str, float]
 
-class FaceAnalyzeResult(BaseModel):
-    emotion: Dict[str, Any]
+    # Optional debug info (not required by spec but useful)
+    processing: Optional[Dict[str, Any]] = None
+
 
 class FaceErrorResponse(BaseModel):
     request_id: str

@@ -143,9 +143,11 @@ class FaceLocalAdapter(FaceAdapter):
             
             return FaceAnalyzeResponse(
                 analysis_id=req.analysis_id or request_id,
-                analyze_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                processing=processing_stats,
-                result=result_data
+                predicted_emotion=predicted_emotion,
+                confidence=confidence,
+                summary=summary,
+                emotion_probabilities=final_probs,
+                processing=processing_stats
             )
 
         except ValueError as ve:

@@ -25,17 +25,20 @@ class FaceHttpAdapter(FaceAdapter):
         # Handle upstream response. If upstream already matches new spec, use it.
         # Otherwise map flat fields.
         
-        # Check if new spec structure exists
-        if "result" in data and "processing" in data:
+        # Try to parse directly if upstream matches spec
+        try:
             return FaceAnalyzeResponse(**data)
+        except Exception:
+            pass
 
-        # Legacy/Flat fallback
+        # Fallback mapping if upstream is inconsistent
         predicted = data.get("predicted_emotion") or data.get("emotion") or "unknown"
         conf = data.get("confidence") or data.get("score") or 0.0
         probs = data.get("emotion_probabilities") or data.get("probs") or {}
         summary = data.get("summary") or "External Analysis"
         debug = data.get("debug")
-
+        
+        # Safe float conversion
         try:
             conf = float(conf)
         except Exception:
@@ -44,21 +47,12 @@ class FaceHttpAdapter(FaceAdapter):
 
         return FaceAnalyzeResponse(
             analysis_id=req.analysis_id or request_id,
-            analyze_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            predicted_emotion=str(predicted),
+            confidence=conf,
+            summary=str(summary),
+            emotion_probabilities={str(k): float(v) for k, v in probs.items()} if isinstance(probs, dict) else {},
             processing={
-                "analysis_time_ms": 0,
-                "frames_extracted": 0,
-                "frames_face_detected": 0,
-                "frames_emotion_inferred": 0,
-                "fps_used": 0,
-                "note": "http_adapter_legacy_map"
-            },
-            result={
-                "emotion": {
-                    "predicted_emotion": str(predicted),
-                    "confidence": conf,
-                    "summary": str(summary),
-                    "emotion_probabilities": {str(k): float(v) for k, v in probs.items()} if isinstance(probs, dict) else {}
-                }
+                "note": "http_adapter_fallback",
+                "debug": debug
             }
         )

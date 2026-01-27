@@ -47,22 +47,19 @@ class FaceMockAdapter(FaceAdapter):
         options = summary_options.get(label, ["알 수 없음"])
         summary = random.choice(options)
 
+        import time
+        start_time = time.time()
+        
         return FaceAnalyzeResponse(
             analysis_id=req.analysis_id or request_id,
-            analyze_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            predicted_emotion=label,
+            confidence=max(probs.get(label, 0.0), 0.0),
+            summary=summary,
+            emotion_probabilities=probs,
             processing={
-                "analysis_time_ms": 100,
+                "analysis_time_ms": int((time.time() - start_time) * 1000),
                 "frames_extracted": 8,
                 "frames_face_detected": 6,
-                "frames_emotion_inferred": 6,
-                "fps_used": 5
-            },
-            result={
-                "emotion": {
-                    "predicted_emotion": label,
-                    "confidence": max(probs.get(label, 0.0), 0.0),
-                    "summary": summary,
-                    "emotion_probabilities": probs
-                }
+                "note": "Mock Adapter"
             }
         )
