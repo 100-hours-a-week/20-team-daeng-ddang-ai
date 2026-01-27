@@ -25,19 +25,19 @@ class MissionStatus(str, Enum):
 
 # 개별 미션 분석 요청 데이터
 class MissionInput(BaseModel):
-    mission_id: str      # 미션 고유 ID
+    mission_id: int      # 미션 고유 ID
     mission_type: MissionType  # 수행해야 할 미션 종류
     video_url: str       # 분석할 비디오 URL (S3 등)
 
 # 전체 미션 분석 요청 (메인 요청 본문)
 class MissionAnalysisRequest(BaseModel):
     analysis_id: str     # 전체 분석 요청 ID
-    walk_id: str         # 산책 ID
+    walk_id: int         # 산책 ID
     missions: List[MissionInput] = Field(..., min_length = 1) # 하나 이상의 미션 포함 필수
 
 # 개별 미션 분석 결과
 class MissionResult(BaseModel):
-    mission_id: str
+    mission_id: int
     mission_type: MissionType
     success: bool        # 성공 여부
     confidence: float = Field(..., ge = 0.0, le = 1.0) # AI 신뢰도 (0.0 ~ 1.0)
@@ -46,6 +46,6 @@ class MissionResult(BaseModel):
 # 전체 분석 결과 응답
 class MissionAnalysisData(BaseModel):
     analysis_id: str
-    walk_id: str
+    walk_id: int
     analyzed_at: str     # 분석 완료 시간 (ISO 포맷)
     missions: List[MissionResult] # 각 미션별 상세 결과 리스트
