@@ -12,7 +12,7 @@ def main():
 
     mission_type = sys.argv[1].upper()
     video_url = sys.argv[2]
-    api_url = sys.argv[3] if len(sys.argv) > 3 else "http://localhost:8000/internal/v1/walks/test-walk/missions/analysis"
+    api_url = sys.argv[3] if len(sys.argv) > 3 else "http://localhost:8000/api/missions/judge"
 
     print(f"Testing Mission: {mission_type}")
     print(f"Video URL: {video_url}")

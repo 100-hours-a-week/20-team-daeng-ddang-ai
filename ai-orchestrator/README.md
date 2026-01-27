@@ -11,7 +11,7 @@
 
 ### 1. 돌발 미션 분석 (Mission Analysis)
 Gemini 1.5 Flash 모델을 활용하여 반려동물 산책 미션(예: "기다려 하기")의 성공 여부를 판단합니다.
-- **Endpoint**: `POST /internal/v1/walks/{walk_id}/missions/analysis`
+- **Endpoint**: `POST /api/missions/judge`
 - **Input**: 동영상 URL, 미션 텍스트
 - **Output**: 성공 여부(true/false), 판단 이유
 
