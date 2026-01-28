@@ -90,12 +90,6 @@ def test_judge():
             print(f"DONE ({elapsed:.2f}s)")
             print(f"Result: {status} (Confidence: {mission_res['confidence']:.2f})")
             
-            # Reason 확인
-            reason_text = (mission_res.get("reason") or "").strip()
-            if not reason_text:
-                reason_text = "[서버에서 Reason 반환 안함]"
-
-            print(f"Reason: {reason_text}")
             
         except requests.exceptions.HTTPError as e:
             print(f"FAILED (HTTP {response.status_code})")

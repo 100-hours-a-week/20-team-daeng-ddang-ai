@@ -15,7 +15,7 @@ print("Verifying Face Analysis Dependencies and Models...")
 if not os.getenv("FACE_DETECTION_MODEL_ID"):
     os.environ["FACE_DETECTION_MODEL_ID"] = "jameslahm/yolov10n"
 if not os.getenv("FACE_EMOTION_MODEL_ID"):
-    os.environ["FACE_EMOTION_MODEL_ID"] = "HSE-motion/hse-emotion-recognizer"
+    os.environ["FACE_EMOTION_MODEL_ID"] = "dima806/facial_emotions_image_detection"
 
 try:
     # Adjust path to find app module

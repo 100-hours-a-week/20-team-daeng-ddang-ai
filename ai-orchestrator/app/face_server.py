@@ -37,6 +37,22 @@ def analyze_face(req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
     req_id = req.analysis_id or "req_unknown" # Adapter expects a request_id for logging
     
     return adapter.analyze(req_id, req)
+    
+    try:
+        return adapter.analyze(req_id, req)
+    except ValueError as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=422, detail={
+            "analysis_id": req.analysis_id,
+            "status": "failed",
+            "error": {
+                "code": "FACE_NOT_DETECTED" if "FACE_NOT_DETECTED" in str(e) else "ANALYSIS_FAILED",
+                "message": str(e)
+            }
+        })
+    except Exception as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
 def health():

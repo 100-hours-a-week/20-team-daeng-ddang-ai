@@ -6,8 +6,11 @@ import datetime
 from app.schemas.face_schema import FaceAnalyzeRequest, FaceAnalyzeResponse
 from app.services.adapters.face_adapter import FaceAdapter
 
+# 테스트 및 개발용 Mock 어댑터
+# 실제 모델 없이 가짜 데이터를 반환함
 class FaceMockAdapter(FaceAdapter):
     def analyze(self, request_id: str, req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
+        # 옵션에서 강제 감정 설정이 있으면 해당 감정 반환
         forced = (req.options or {}).get("force_emotion")
         label = forced or "relaxed"
 

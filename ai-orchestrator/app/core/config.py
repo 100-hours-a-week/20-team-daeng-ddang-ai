@@ -11,6 +11,6 @@ FACE_HTTP_TIMEOUT_SECONDS = float(os.getenv("FACE_HTTP_TIMEOUT_SECONDS", "20"))
 FACE_JOB_MODE = os.getenv("FACE_JOB_MODE", "off").lower()
 
 # Local Face Analysis (Dog) Config
-FACE_DETECTION_MODEL_ID = os.getenv("FACE_DETECTION_MODEL_ID", "jameslahm/yolov10n")
-FACE_EMOTION_MODEL_ID = os.getenv("FACE_EMOTION_MODEL_ID", "dima806/facial_emotions_image_detection")
+FACE_DETECTION_MODEL_ID = os.getenv("FACE_DETECTION_MODEL_ID", "20-team-daeng-ddang-ai/dog-detection")
+FACE_EMOTION_MODEL_ID = os.getenv("FACE_EMOTION_MODEL_ID", "20-team-daeng-ddang-ai/dog-emotion-classification")
 HF_TOKEN = os.getenv("HF_TOKEN")
