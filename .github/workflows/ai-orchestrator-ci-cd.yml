@@ -101,23 +101,18 @@ jobs:
             # 3) current 교체
             ln -sfn "${RELEASE_DIR}" "${CURRENT_LINK}"
 
-            cat > "${CURRENT_LINK}/.env" <<EOF
-            DEBUG=${{ secrets.DEBUG }}
-            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-            FACE_DETECTION_MODEL_ID=${{ secrets.FACE_DETECTION_MODEL_ID }}
-            FACE_EMOTION_MODEL_ID=${{ secrets.FACE_EMOTION_MODEL_ID }}
-            HF_TOKEN=${{ secrets.HF_TOKEN }}
-            EOF
-            chmod 600 "${CURRENT_LINK}/.env"
+            # 4) env 생성
+            umask 022
+            echo "${{ secrets.ENV_FILE_B64 }}" | base64 -d > "${CURRENT_LINK}/.env"
 
-            # 4) venv 준비
+            # 5) venv 준비
             if [ ! -d "${AI_DIR}/venv" ]; then
               python3 -m venv "${AI_DIR}/venv"
             fi
 
             "${AI_DIR}/venv/bin/python" -m pip install --upgrade pip wheel setuptools
 
-            # 5) requirements 설치
+            # 6) requirements 설치
             if [ -f "${CURRENT_LINK}/requirements.txt" ]; then
               "${AI_DIR}/venv/bin/pip" install -r "${CURRENT_LINK}/requirements.txt"
             else
@@ -125,7 +120,7 @@ jobs:
               exit 1
             fi
 
-            # 6) PM2로 uvicorn 실행
+            # 7) PM2로 uvicorn 실행
             APP_NAME="app-ai"
             APP_MODULE="app.main:app"
             PORT="8000"
