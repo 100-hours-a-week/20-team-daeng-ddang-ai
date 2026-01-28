@@ -102,8 +102,11 @@ jobs:
             ln -sfn "${RELEASE_DIR}" "${CURRENT_LINK}"
 
             cat > "${CURRENT_LINK}/.env" <<EOF
+            DEBUG=${{ secrets.DEBUG }}
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-            GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
+            FACE_DETECTION_MODEL_ID=${{ secrets.FACE_DETECTION_MODEL_ID }}
+            FACE_EMOTION_MODEL_ID=${{ secrets.FACE_EMOTION_MODEL_ID }}
+            HF_TOKEN=${{ secrets.HF_TOKEN }}
             EOF
             chmod 600 "${CURRENT_LINK}/.env"
 
