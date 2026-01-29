@@ -1,0 +1,3 @@
+# Root .gitignore to exclude global artifacts
+*.pdf
+.DS_Store
