@@ -89,8 +89,8 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           CI_START: ${{ steps.ci_time.outputs.start }}
           CI_END: ${{ steps.ci_time_end.outputs.end }}
-          # LINT_S: ${{ steps.time_lint.outputs.start }}
-          # LINT_E: ${{ steps.time_lint.outputs.end }}
+          LINT_S: ${{ steps.time_lint.outputs.start }}
+          LINT_E: ${{ steps.time_lint.outputs.end }}
           PKG_S: ${{ steps.time_package.outputs.start }}
           PKG_E: ${{ steps.time_package.outputs.end }}
         run: |
