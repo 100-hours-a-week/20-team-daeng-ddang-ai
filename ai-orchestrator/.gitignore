@@ -31,4 +31,7 @@ test_data/
 scripts/
 
 # testing dev
-testing_dev/server.pid
+testing_dev
+
+# pid
+.pid
