@@ -1,0 +1,17 @@
+
+fastapi
+uvicorn
+requests
+python-multipart
+uvloop
+httpx
+python-dotenv
+# ML Dependencies
+torch
+torchvision
+ultralytics
+transformers
+huggingface_hub
+opencv-python-headless
+pillow
+numpy

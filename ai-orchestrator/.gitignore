@@ -26,3 +26,9 @@ __pycache__/
 
 # test data
 test_data/
+
+# scripts
+scripts/
+
+# testing dev
+testing_dev/server.pid

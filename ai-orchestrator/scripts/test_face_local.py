@@ -4,6 +4,9 @@ import logging
 import json
 from dotenv import load_dotenv
 
+# Load .env first before importing app modules that read env vars
+load_dotenv()
+
 # Adjust path to find app module
 sys.path.append(os.getcwd())
 
@@ -11,8 +14,11 @@ from app.services.adapters.face_local_adapter import FaceLocalAdapter
 from app.schemas.face_schema import FaceAnalyzeRequest
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
-load_dotenv()
+logging.basicConfig(
+    level=logging.DEBUG, 
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
 
 def main():
     if len(sys.argv) < 2:

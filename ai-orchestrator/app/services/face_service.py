@@ -8,7 +8,7 @@ from app.core.config import FACE_MODE
 from app.schemas.face_schema import FaceAnalyzeRequest, FaceAnalyzeResponse
 from app.services.adapters.face_mock_adapter import FaceMockAdapter
 from app.services.adapters.face_http_adapter import FaceHttpAdapter
-from app.services.adapters.face_local_adapter import FaceLocalAdapter
+
 from app.services.adapters.face_adapter import FaceAdapter
 
 _adapter_instance = None
@@ -21,8 +21,7 @@ def _select_adapter() -> FaceAdapter:
 
     if FACE_MODE == "http":
         _adapter_instance = FaceHttpAdapter()
-    elif FACE_MODE == "local":
-        _adapter_instance = FaceLocalAdapter()
+
     else:
         # 기본값: Mock 어댑터 (테스트용)
         _adapter_instance = FaceMockAdapter()
@@ -37,4 +36,10 @@ def analyze_face_sync(req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
 
     request_id = str(uuid.uuid4())
     adapter = _select_adapter()
-    return adapter.analyze(request_id, req)
+    response = adapter.analyze(request_id, req)
+    
+    # 응답에 요청받은 video_url 주입 (스키마에는 있으나 어댑터들이 누락하는 경우 대비)
+    if not response.video_url:
+        response.video_url = req.video_url
+        
+    return response

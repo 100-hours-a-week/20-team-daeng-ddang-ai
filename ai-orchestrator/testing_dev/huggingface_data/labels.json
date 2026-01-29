@@ -1,0 +1,14 @@
+{
+  "label2id": {
+    "angry": 0,
+    "happy": 1,
+    "relaxed": 2,
+    "sad": 3
+  },
+  "id2label": {
+    "0": "angry",
+    "1": "happy",
+    "2": "relaxed",
+    "3": "sad"
+  }
+}

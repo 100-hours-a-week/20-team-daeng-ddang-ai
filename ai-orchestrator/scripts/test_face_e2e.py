@@ -42,6 +42,13 @@ def test_face_analysis(video_url: str):
         print(f"Confidence: {result.get('confidence', 0.0):.2f}")
         print(f"Summary: {result.get('summary', 'N/A')}")
         
+        # Verify video_url
+        returned_url = result.get('video_url')
+        if returned_url == video_url:
+            print(f"Video URL Verified: {returned_url}")
+        else:
+            print(f"WARNING: Video URL Mismatch! Expected: {video_url}, Got: {returned_url}")
+        
         print("\n--- Full Response ---")
         print(json.dumps(result, indent=2, ensure_ascii=False))
 

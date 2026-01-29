@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Environment variables
+.env
+
+# Mac
+.DS_Store
+
+# Logs
+*.log
+
+# Face Service Specific
+debug_crops/
+model_cache/
+
+# Heavy Model Files (should not be committed)
+*.pt
+*.pth
+*.safetensors
+*.bin
