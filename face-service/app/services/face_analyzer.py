@@ -21,7 +21,9 @@ from app.core.config import (
     FACE_DETECTION_MODEL_ID,
     FACE_EMOTION_MODEL_ID,
     HF_TOKEN,
+    HF_TOKEN,
     DEBUG,
+    TORCH_DEVICE,
 )
 from app.schemas.face_schema import FaceAnalyzeRequest, FaceAnalyzeResponse, FaceErrorResponse
 from app.schemas.face_schema import FaceAnalyzeRequest, FaceAnalyzeResponse, FaceErrorResponse
@@ -83,7 +85,7 @@ class FaceAnalyzer:
         self._ensure_dependencies()
         self._authenticate_hf()
         
-        logger.info(f"FaceAnalyzer 로딩 시작: Detection={FACE_DETECTION_MODEL_ID}, Emotion={FACE_EMOTION_MODEL_ID}")
+        logger.info(f"FaceAnalyzer 로딩 시작: Detection={FACE_DETECTION_MODEL_ID}, Emotion={FACE_EMOTION_MODEL_ID}, Device={TORCH_DEVICE}")
         
         # 1. 객체 탐지 모델 로드 (YOLO)
         # HuggingFace Repo ID인 경우 best.pt를 다운로드하여 로드합니다.
@@ -178,8 +180,8 @@ class FaceAnalyzer:
             self.classifier.classifier[1] = torch.nn.Linear(num_features, num_classes)
             
             # 모델 가중치 로드
-            # 안전을 위해 CPU로 매핑, GPU 필요시 수정
-            checkpoint = torch.load(weight_path, map_location=torch.device('cpu')) 
+            # 안전을 위해 CPU(또는 지정된 DEVICE)로 매핑
+            checkpoint = torch.load(weight_path, map_location=torch.device(TORCH_DEVICE)) 
             
             # 전체 체크포인트인지 state_dict인지 확인
             if "model_state_dict" in checkpoint:
@@ -189,6 +191,7 @@ class FaceAnalyzer:
                 state_dict = checkpoint
                 
             self.classifier.load_state_dict(state_dict)
+            self.classifier.to(TORCH_DEVICE) # Move model to configured device
             self.classifier.eval()
             logger.info(f"Successfully loaded model weights from {weight_path}")
 
@@ -397,7 +400,8 @@ class FaceAnalyzer:
                 logger.debug("DEBUG is False, skipping image dump.")
 
         # 1. 얼굴 탐지 (YOLO) - BGR 입력 허용
-        yolo_results = self.detector(frame_bgr, verbose=False)
+        # Force device usage for YOLO
+        yolo_results = self.detector(frame_bgr, verbose=False, device=TORCH_DEVICE)
         if not yolo_results: return None
         result = yolo_results[0]
         
@@ -459,8 +463,8 @@ class FaceAnalyzer:
             bbox_filename = f"{request_id}_{frame_idx}_01_bbox.jpg"
             cv2.imwrite(str(debug_dir / bbox_filename), bbox_frame)
         
-        margin_x = int(w * 0.0)
-        margin_y = int(h * 0.0)
+        margin_x = int(w * 0.2)
+        margin_y = int(h * 0.2)
         
         x1 = max(0, x1 - margin_x)
         y1 = max(0, y1 - margin_y)
@@ -485,7 +489,7 @@ class FaceAnalyzer:
         pil_img = Image.fromarray(crop_rgb)
         
         # Apply Transform
-        input_tensor = self.transform(pil_img).unsqueeze(0) # Add batch dimension
+        input_tensor = self.transform(pil_img).unsqueeze(0).to(TORCH_DEVICE) # Add batch dimension & move to device
 
         with torch.no_grad():
             logits = self.classifier(input_tensor)
