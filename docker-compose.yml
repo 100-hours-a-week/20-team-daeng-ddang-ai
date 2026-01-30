@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  ai-orchestrator:
+    build: ./ai-orchestrator
+    container_name: ai-orchestrator
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=true
+      - FACE_MODE=http
+      - FACE_SERVICE_URL=http://face-service:8100
+      # You must provide these keys in .env file or environment
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - HF_TOKEN=${HF_TOKEN}
+    depends_on:
+      - face-service
+    networks:
+      - ai-network
+
+  face-service:
+    build: ./face-service
+    container_name: face-service
+    ports:
+      - "8100:8100"
+    environment:
+      - DEBUG=true
+      - PORT=8100
+      - HF_TOKEN=${HF_TOKEN}
+      # Model IDs
+      - FACE_DETECTION_MODEL_ID=wuhp/dog-yolo
+      - FACE_EMOTION_MODEL_ID=20-team-daeng-ddang-ai/dog-emotion-classification
+    networks:
+      - ai-network
+
+networks:
+  ai-network:
+    driver: bridge

@@ -1,11 +1,4 @@
-fastapi
-uvicorn
-requests
-python-multipart
-uvloop
-httpx
-python-dotenv
-# ML Dependencies
+--extra-index-url https://download.pytorch.org/whl/cpu
 torch
 torchvision
 ultralytics
@@ -14,3 +7,10 @@ huggingface_hub
 opencv-python-headless
 pillow
 numpy
+fastapi
+uvicorn
+requests
+python-multipart
+uvloop
+httpx
+python-dotenv

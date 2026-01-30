@@ -20,10 +20,7 @@ class FaceHttpAdapter(FaceAdapter):
         payload["request_id"] = request_id
 
         r = requests.post(url, json=payload, timeout=FACE_HTTP_TIMEOUT_SECONDS)
-        r = requests.post(url, json=payload, timeout=FACE_HTTP_TIMEOUT_SECONDS)
-        
 
-                
         r.raise_for_status()
         data = r.json()
 
