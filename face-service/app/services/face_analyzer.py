@@ -139,15 +139,18 @@ class FaceAnalyzer:
         # 2. 감정 분류 모델 로드 (Custom EfficientNet-B0)
         try:
             # 설정 파일 및 가중치 다운로드
-            labels_path = hf_hub_download(repo_id=FACE_EMOTION_MODEL_ID, filename="labels.json")
+            # 설정 파일 및 가중치 다운로드
+            labels_path = hf_hub_download(repo_id=FACE_EMOTION_MODEL_ID, filename="class.json")
             preprocess_path = hf_hub_download(repo_id=FACE_EMOTION_MODEL_ID, filename="preprocess.json")
             weight_path = hf_hub_download(repo_id=FACE_EMOTION_MODEL_ID, filename="best.pt")
 
-            # 라벨 로드
+            # 라벨 로드 (class.json은 {"0": "angry", ...} 형태)
             with open(labels_path, "r") as f:
                 labels_data = json.load(f)
-                self.id2label = {int(k): v for k, v in labels_data["id2label"].items()}
-                self.label2id = labels_data["label2id"]
+                # id2label 생성
+                self.id2label = {int(k): v for k, v in labels_data.items()}
+                # label2id 생성
+                self.label2id = {v: k for k, v in self.id2label.items()}
             
             num_classes = len(self.id2label)
             logger.info(f"Loaded {num_classes} classes from labels.json: {self.id2label}")
