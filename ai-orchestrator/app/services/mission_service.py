@@ -1,8 +1,8 @@
 # app/services/mission_service.py
-from __future__ import annotations
 import logging, json
 from datetime import datetime
 from typing import List
+from fastapi import HTTPException # For re-raising 429
 from app.core.config import DEBUG
 from app.schemas.mission_schema import MissionResult, MissionInput
 from app.services.gemini_client import GeminiClient
@@ -12,12 +12,28 @@ gemini_client = GeminiClient()
 
 logger = logging.getLogger(__name__)
 
+import backoff 
+from google.api_core.exceptions import ResourceExhausted
+
+# --- 429 Error (Rate Limit) Handling with Backoff ---
+# @backoff.on_exception(
+#     backoff.expo,
+#     (ResourceExhausted, HTTPException), # 429 에러 등을 잡아서 재시도
+#     max_tries=3,
+#     factor=2, # 지수 백오프 (2초, 4초, 8초...)
+#     giveup=lambda e: getattr(e, "status_code", None) != 429 and not isinstance(e, ResourceExhausted)
+# )
+# ----------------------------------------------------
 def analyze_sync(missions: List[MissionInput]) -> List[MissionResult]:
     results: List[MissionResult] = []
 
     # 요청받은 모든 미션에 대해 순차적으로 처리
     for m in missions:
         try:
+            # --- 429 Error Handling (Retry Logic) ---
+            # 재시도 로직이 필요하다면 위에 정의한 @backoff 데코레이터가 적용된 별도 함수를 호출해야 합니다.
+            # 예: result_text = _call_gemini_with_retry(gemini_client, m.video_url, prompt)
+            
             # 미션 타입에 맞는 심사 기준 프롬프트 생성 (예: SIT -> 앉아 미션 기준)
             prompt = build_prompt(m.mission_type.value)
             
@@ -26,6 +42,9 @@ def analyze_sync(missions: List[MissionInput]) -> List[MissionResult]:
                 video_url=m.video_url,
                 prompt_text=prompt
             )
+
+            # (기존 주석 처리된 예외 처리는 제거하거나 유지)
+            # -----------------------------------------------
             
             # JSON 파싱을 위한 전처리 (마크다운 코드 블록 제거 등)
             clean = result_text.strip()

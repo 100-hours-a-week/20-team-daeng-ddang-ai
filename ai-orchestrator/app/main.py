@@ -30,12 +30,12 @@ IS_DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
 # 외부 라이브러리 로그 레벨 조정
 if IS_DEBUG:
-    # 디버그 모드일 때는 INFO 로그 허용
+    # 디버그 모드일 때는 INFO 로그 허용 (상세 로그)
     logging.getLogger("google_genai").setLevel(logging.INFO)
     logging.getLogger("httpx").setLevel(logging.INFO)
     logging.getLogger("httpcore").setLevel(logging.INFO)
 else:
-    # 운영 모드일 때는 WARNING 이상만 출력하여 로그 정리
+    # 운영 모드일 때는 WARNING 이상만 출력하여 로그 정리 (불필요한 로그 방지)
     logging.getLogger("google_genai").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
@@ -44,6 +44,7 @@ else:
 k = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
 if k:
     if IS_DEBUG:
+        # 보안을 위해 키의 일부 해시값만 로그에 출력
         key_hash = hashlib.sha256(k.encode()).hexdigest()[:12]
         logger.info(f"[SERVER KeyHash] {key_hash}")
 else:

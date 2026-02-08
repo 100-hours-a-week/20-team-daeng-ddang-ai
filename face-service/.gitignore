@@ -9,12 +9,31 @@ venv/
 
 # Environment variables
 .env
+.env.*
 
 # Mac
 .DS_Store
 
 # Logs
 *.log
+
+# PDFs
+*.pdf
+
+# Ideas
+.idea/
+
+# Test Data
+test_data/
+
+# Scripts
+scripts/
+
+# Testing Dev
+testing_dev
+
+# PID
+*.pid
 
 # Face Service Specific
 debug_crops/

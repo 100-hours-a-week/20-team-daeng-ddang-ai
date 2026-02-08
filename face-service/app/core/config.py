@@ -9,8 +9,7 @@ load_dotenv()
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
 # Face Analysis Model Config
-FACE_DETECTION_MODEL_ID = os.getenv("FACE_DETECTION_MODEL_ID", "wuhp/dog-yolo")
-# FACE_DETECTION_MODEL_ID = os.getenv("FACE_DETECTION_MODEL_ID", "20-team-daeng-ddang-ai/dog-detection")
+FACE_DETECTION_MODEL_ID = os.getenv("FACE_DETECTION_MODEL_ID", "20-team-daeng-ddang-ai/dog-detection")
 FACE_EMOTION_MODEL_ID = os.getenv("FACE_EMOTION_MODEL_ID", "20-team-daeng-ddang-ai/dog-emotion-classification")
 HF_TOKEN = os.getenv("HF_TOKEN")
 

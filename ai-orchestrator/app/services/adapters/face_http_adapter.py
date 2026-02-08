@@ -19,14 +19,15 @@ class FaceHttpAdapter(FaceAdapter):
         payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
         payload["request_id"] = request_id
 
+        # 외부 API 호출 (Timeout 설정 포함)
         r = requests.post(url, json=payload, timeout=FACE_HTTP_TIMEOUT_SECONDS)
 
         r.raise_for_status()
         data = r.json()
 
         # 외부 API 응답 처리:
-        # 1. 스키마가 일치하면 바로 변환
-        # 2. 불일치하면 필드 매핑 시도 (Fallback)
+        # 1. 스키마가 완벽히 일치하면 바로 변환 (Happy Path)
+        # 2. 불일치하면 필드 매핑 시도 (Fallback) - 외부 스키마 변경 대응
         
         # Try to parse directly if upstream matches spec
         try:
@@ -35,11 +36,11 @@ class FaceHttpAdapter(FaceAdapter):
             pass
 
         # Fallback mapping if upstream returns inconsistent flat or nested data
-        # Prioritize flat structure
+        # (과거 스키마나 다른 형태의 응답을 최대한 현재 스키마로 변환)
         predicted = data.get("predicted_emotion") or data.get("emotion") or "unknown"
         conf = data.get("confidence") or data.get("score") or 0.0
         
-        # Handle probability map
+        # Handle probability map (감정별 확률)
         probs = data.get("emotion_probabilities") or data.get("probs")
         if not probs:
             # Check if nested in 'emotion' dict (old schema style)
@@ -50,13 +51,14 @@ class FaceHttpAdapter(FaceAdapter):
         summary = data.get("summary") or "External Analysis"
         debug = data.get("debug")
         
-        # Safe float conversion
+        # Safe float conversion (형변환 안전 장치)
         try:
             conf = float(conf)
         except Exception:
             conf = 0.0
         conf = min(max(conf, 0.0), 1.0)
 
+        # 최종 응답 객체 생성
         return FaceAnalyzeResponse(
             analysis_id=req.analysis_id or request_id,
             predicted_emotion=str(predicted),

@@ -14,6 +14,8 @@ from app.services.adapters.face_adapter import FaceAdapter
 _adapter_instance = None
 
 # 설정(FACE_MODE)에 따라 적절한 어댑터 인스턴스를 반환 (Singleton 패턴)
+# http: 외부 Face Service 서버로 요청 전송
+# mock: 테스트용 가짜 응답 반환 (개발 단계용)
 def _select_adapter() -> FaceAdapter:
     global _adapter_instance
     if _adapter_instance:

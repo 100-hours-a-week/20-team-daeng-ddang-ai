@@ -1,37 +1,40 @@
-# venv
-.venv/
-venv/
-
-# python cache
+# Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*.so
+.Python
+env/
+venv/
+.venv/
 
-# env files
+# Environment variables
 .env
 .env.*
 
-# mac
+# Mac
 .DS_Store
 
-# logs
+# Logs
 *.log
 
-# pdfs
+# PDFs
 *.pdf
 
-# ideas
+# Ideas
 .idea/
 
-# test data
+# Test Data
 test_data/
 
-# scripts
+# Scripts
 scripts/
 
-# testing dev
+# Testing Dev
 testing_dev
 
-# pid
+# PID
 *.pid
+
+# Model Files
+model_files/
+model_files_emotion/

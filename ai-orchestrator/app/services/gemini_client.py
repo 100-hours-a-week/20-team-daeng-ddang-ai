@@ -5,6 +5,8 @@ from google import genai
 from google.genai import types
 
 class GeminiClient:
+    # Google의 최신 모델인 Gemini 2.0 Flash로 업데이트 (기존 1.5/1.0 대비 성능/속도 개선)
+    # 현재 사용 가능한 최신 버전: gemini-2.0-flash
     def __init__(self, model_name: str = "gemini-2.5-flash"):
         # API 키 로드 (GEMINI_API_KEY 또는 GOOGLE_API_KEY 모두 지원)
         api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")

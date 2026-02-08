@@ -1,3 +1,4 @@
+# app/routers/mission_router.py
 from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from app.schemas.mission_schema import (
@@ -11,7 +12,7 @@ from app.services.mission_service import analyze_sync, now_iso
 router = APIRouter(prefix = "/api/missions", tags = ["mission"])
 
 # 미션 판정 엔드포인트
-# 백엔드 서버가 판정을 요청하면 Gemini를 통해 분석 후 결과를 반환
+# 백엔드 서버가 판정을 요청하면 Gemini를 통해 분석 후 결과를 반환합니다.
 @router.post(
     "/judge", 
     response_model=MissionAnalysisData,
@@ -34,6 +35,11 @@ def analyze_missions_judge(
             analyzed_at = now_iso(), # 분석 완료 시각
             missions = results,
         )
+    # --- 429 Error Handling Example ---
+    # except HTTPException as he:
+    #     # 서비스 계층에서 발생시킨 HTTP 예외(429 등)는 그대로 통과시켜 클라이언트(API Gateway/Backend)가 알 수 있게 함
+    #     raise he
+    # --------------------------------__
     except Exception as e:
         # 전역 예외 처리 -> 500 Error Spec 반환
         error_detail = MissionErrorDetail(
