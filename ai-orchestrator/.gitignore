@@ -38,3 +38,6 @@ testing_dev
 # Model Files
 model_files/
 model_files_emotion/
+
+# docs
+docs/
