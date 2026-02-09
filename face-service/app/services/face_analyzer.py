@@ -33,6 +33,7 @@ FACE_AREA_MIN_RATIO = 0.02     # 프레임 대비 얼굴 최소 크기 비율 (2
 MAX_FRAMES = 12                # 분석할 최대 프레임 수
 # DOG_CLASS_ID는 모델 로드 시 동적으로 결정되지만 기본값으로 설정
 DEFAULT_DOG_CLASS_ID = 16
+MIN_FRAME_DETECT_RATIO = 0.25   # 최소 20% 이상의 프레임에서 강아지가 탐지되어야 함
 
 # 나레이션 템플릿 (감정과 신뢰도에 따른 문구)
 NARRATION_TEMPLATES = {
@@ -212,7 +213,8 @@ class FaceAnalyzer:
     # 4. 결과 앙상블 (Margin Weighted Voting)
     # 5. 나레이션 생성 및 응답 구성
     def analyze(self, request_id: str, req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
-        logger.info(f"[{request_id}] 분석 시작: {req.video_url}")
+        if DEBUG:
+            logger.debug(f"[{request_id}] 분석 시작: {req.video_url}")
         
         start_time = time.time()
         tmp_video_path = None
@@ -223,11 +225,21 @@ class FaceAnalyzer:
             
             # 2. Extract & Process Frames
             # 최대 12프레임까지 처리 가능
-            frame_results = self._process_video(tmp_video_path, request_id)
+            frame_results, total_processed_count = self._process_video(tmp_video_path, request_id)
             
             # 3. 앙상블 계산
-            if not frame_results:
-                logger.warning(f"[{request_id}] 선택된 프레임에서 강아지 얼굴을 찾지 못했습니다.")
+            total_frames = total_processed_count
+            detected_frames = len(frame_results)
+            
+            # 비율 계산
+            detection_ratio = detected_frames / total_frames if total_frames > 0 else 0.0
+            
+            if DEBUG:
+                logger.debug(f"[{request_id}] Detection Ratio: {detection_ratio:.2f} ({detected_frames}/{total_frames})")
+
+            # 최소 비율 미달 시 실패 처리
+            if not frame_results or detection_ratio < MIN_FRAME_DETECT_RATIO:
+                logger.warning(f"[{request_id}] 강아지 탐지 실패 또는 비율 미달 (Ratio: {detection_ratio:.2f} < {MIN_FRAME_DETECT_RATIO})")
                 # 실패 응답 반환
                 include_processing = DEBUG or req.options.get("include_processing", False)
                 
@@ -235,9 +247,9 @@ class FaceAnalyzer:
                 if include_processing:
                     processing_stats = {
                         "analysis_time_ms": int((time.time() - start_time) * 1000),
-                        "frames_extracted": 0,
-                        "frames_face_detected": 0,
-                        "frames_emotion_inferred": 0,
+                        "frames_extracted": total_frames,
+                        "frames_face_detected": detected_frames,
+                        "frames_emotion_inferred": detected_frames,
                         "fps_used": 2
                     }
                 return FaceAnalyzeResponse(
@@ -259,8 +271,8 @@ class FaceAnalyzer:
             if include_processing:
                 processing_stats = {
                     "analysis_time_ms": int((time.time() - start_time) * 1000),
-                    "frames_extracted": 8, # 근사값
-                    "frames_face_detected": len(frame_results),
+                    "frames_extracted": total_frames,
+                    "frames_face_detected": detected_frames,
                     "frames_emotion_inferred": len(frame_results),
                     "fps_used": 2
                 }
@@ -297,12 +309,13 @@ class FaceAnalyzer:
                     f.write(chunk)
         return path
 
-    def _process_video(self, video_path: str, request_id: str) -> List[Dict[str, Any]]:
+    def _process_video(self, video_path: str, request_id: str) -> Tuple[List[Dict[str, Any]], int]:
         extracted_frames_dir = Path(tempfile.mkdtemp())
         try:
             # 1. 프레임 추출 실행 (FPS Sampling)
             frame_paths, extraction_method = self._extract_frames(Path(video_path), extracted_frames_dir)
-            logger.info(f"[{request_id}] Extracted {len(frame_paths)} frames via {extraction_method}")
+            if DEBUG:
+                logger.debug(f"[{request_id}] Extracted {len(frame_paths)} frames via {extraction_method}")
             
             # 2. MAX_FRAMES 제한 (균등 샘플링)
             if len(frame_paths) > MAX_FRAMES:
@@ -324,7 +337,7 @@ class FaceAnalyzer:
                 if res:
                     results.append(res)
                     
-            return results
+            return results, len(selected_paths)
             
         finally:
             # Clean up frames
@@ -419,8 +432,9 @@ class FaceAnalyzer:
         FACE_PAD_RATIO = 0.20
         pw, ph = int(w * FACE_PAD_RATIO), int(h * FACE_PAD_RATIO)
         
-        # Debug: Save BBox Frame
+        # Debug: Save BBox Frame & Log Confidence
         if DEBUG:
+            logger.info(f"[{request_id}] Frame {frame_idx}: Detected Dog with confidence {max_conf:.2f}")
             bbox_frame = frame_bgr.copy()
             cv2.rectangle(bbox_frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
             cv2.putText(bbox_frame, f"Dog {max_conf:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
