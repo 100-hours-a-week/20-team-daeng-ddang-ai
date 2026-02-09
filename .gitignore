@@ -1,3 +1,35 @@
 # Root .gitignore to exclude global artifacts
 *.pdf
 .DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Model Weights (Large files)
+*.pt
+*.pth
+*.onnx
+*.h5
+*.ckpt
+*.safetensors
+
+# Datasets
+datasets/
+data/
+test_data/
+
+# Logs & Training Results
+*.log
+runs/
+wandb/
+mlruns/
+
+# IDE
+.idea/
+.vscode/

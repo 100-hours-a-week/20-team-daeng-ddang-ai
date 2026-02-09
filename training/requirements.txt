@@ -1,0 +1,9 @@
+torch>=2.0.0
+torchvision>=0.15.0
+ultralytics>=8.0.0
+timm>=0.9.0
+opencv-python>=4.8.0
+tqdm
+pandas
+matplotlib
+thop

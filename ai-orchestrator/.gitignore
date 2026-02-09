@@ -39,5 +39,8 @@ testing_dev
 model_files/
 model_files_emotion/
 
+# test data
+test_data/
+
 # docs
 docs/
