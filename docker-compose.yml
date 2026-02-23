@@ -10,11 +10,15 @@ services:
       - DEBUG=true
       - FACE_MODE=http
       - FACE_SERVICE_URL=http://face-service:8100
+      - HEALTHCARE_MODE=http
+      - HEALTHCARE_SERVICE_URL=http://healthcare-service:8200
+      - HEALTHCARE_HTTP_TIMEOUT_SECONDS=60
       # You must provide these keys in .env file or environment
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - HF_TOKEN=${HF_TOKEN}
     depends_on:
       - face-service
+      - healthcare-service
     networks:
       - ai-network
 

@@ -8,6 +8,7 @@ load_dotenv()
 from fastapi import FastAPI
 from app.routers.mission_router import router as mission_router
 from app.routers.face_router import router as face_router
+from app.routers.healthcare_router import router as healthcare_router
 
 # 로깅 설정 (시간, 레벨, 메시지 포맷 정의)
 logging.basicConfig(
@@ -53,6 +54,7 @@ else:
 # 라우터 등록 (기능별 API 라우트를 앱에 추가)
 app.include_router(mission_router)
 app.include_router(face_router)
+app.include_router(healthcare_router)
 
 # --- 라우트 정보 로깅 (디버그 모드일 때만 출력) ---
 if IS_DEBUG:
