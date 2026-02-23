@@ -33,6 +33,25 @@ services:
     networks:
       - ai-network
 
+  healthcare-service:
+    build: ./healthcare-service
+    container_name: healthcare-service
+    ports:
+      - "8200:8200"
+    environment:
+      - DEBUG_MODE=true
+      - PORT=8200
+      - HEALTH_MODEL_ID=20-team-daeng-ddang-ai/dog-pose-estimation
+      - HEALTH_MODEL_FILENAME=best.pt
+      - HF_TOKEN=${HF_TOKEN}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-ap-northeast-2}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - S3_PREFIX=healthcare
+    networks:
+      - ai-network
+
 networks:
   ai-network:
     driver: bridge
