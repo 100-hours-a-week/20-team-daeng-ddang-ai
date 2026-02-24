@@ -64,7 +64,7 @@ class HealthAnalyzerService:
         dog_id = int(req.dog_id) if req.dog_id is not None else 123
 
         logger.info("Healthcare analyze start id=%s dog_id=%s debug=%s", analysis_id, dog_id, DEBUG_MODE)
-        report = self.analyzer.analyze_video(video_source=req.video_url, dog_id=dog_id, analysis_id=analysis_id)
+        report = self.analyzer.analyze_video(video_source=str(req.video_url), dog_id=dog_id, analysis_id=analysis_id)
 
         # Upload overlay artifact to S3 if available
         artifacts = report.get("artifacts") or {}
@@ -86,7 +86,12 @@ class HealthAnalyzerService:
             logger.warning("Overlay file not found for upload: %s", local_path)
             return None
 
-        s3_key = f"{S3_PREFIX.rstrip('/')}/{analysis_id}/{local_path.name}"
+        # Create a time-based folder structure: S3_PREFIX/YYYY/MM/DD/filename
+        from datetime import datetime
+        now = datetime.now()
+        year_month_day_path = f"{now.strftime('%Y')}/{now.strftime('%m')}/{now.strftime('%d')}"
+        s3_key = f"{S3_PREFIX.rstrip('/')}/{year_month_day_path}/{local_path.name}"
+        
         try:
             self.s3_client.upload_file(str(local_path), S3_BUCKET_NAME, s3_key)
             url = f"https://{S3_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import requests
+import json
 from app.core.config import HEALTHCARE_SERVICE_URL, HEALTHCARE_HTTP_TIMEOUT_SECONDS
 from app.schemas.healthcare_schema import HealthcareAnalyzeRequest, HealthcareAnalyzeResponse
 from app.services.adapters.healthcare_adapter import HealthcareAdapter
@@ -13,7 +14,7 @@ class HealthcareHttpAdapter(HealthcareAdapter):
 
     def analyze(self, request_id: str, req: HealthcareAnalyzeRequest) -> HealthcareAnalyzeResponse:
         url = f"{self.base_url}/analyze"
-        payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+        payload = req.model_dump(mode="json") if hasattr(req, "model_dump") else json.loads(req.json())
         payload["request_id"] = request_id
 
         r = requests.post(url, json=payload, timeout=HEALTHCARE_HTTP_TIMEOUT_SECONDS)
