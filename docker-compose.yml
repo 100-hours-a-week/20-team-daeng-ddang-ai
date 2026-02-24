@@ -10,11 +10,15 @@ services:
       - DEBUG=true
       - FACE_MODE=http
       - FACE_SERVICE_URL=http://face-service:8100
+      - HEALTHCARE_MODE=http
+      - HEALTHCARE_SERVICE_URL=http://healthcare-service:8200
+      - HEALTHCARE_HTTP_TIMEOUT_SECONDS=60
       # You must provide these keys in .env file or environment
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - HF_TOKEN=${HF_TOKEN}
     depends_on:
       - face-service
+      - healthcare-service
     networks:
       - ai-network
 
@@ -30,6 +34,25 @@ services:
       # Model IDs
       - FACE_DETECTION_MODEL_ID=wuhp/dog-yolo
       - FACE_EMOTION_MODEL_ID=20-team-daeng-ddang-ai/dog-emotion-classification
+    networks:
+      - ai-network
+
+  healthcare-service:
+    build: ./healthcare-service
+    container_name: healthcare-service
+    ports:
+      - "8200:8200"
+    environment:
+      - DEBUG_MODE=true
+      - PORT=8200
+      - HEALTH_MODEL_ID=20-team-daeng-ddang-ai/dog-pose-estimation
+      - HEALTH_MODEL_FILENAME=best.pt
+      - HF_TOKEN=${HF_TOKEN}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REGION=${AWS_REGION:-ap-northeast-2}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - S3_PREFIX=healthcare
     networks:
       - ai-network
 
