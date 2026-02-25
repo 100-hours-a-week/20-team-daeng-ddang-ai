@@ -1,11 +1,18 @@
 # Chatbot Service Dockerfile
-# NOTE: GPU 서버에서 실행 시 아래 베이스 이미지를 변경하세요.
-#   예) FROM nvidia/cuda:12.1.0-cudnn8-runtime-ubuntu22.04
 FROM python:3.11-slim
+
+# NVIDIA GPU/CUDA 지원을 위한 환경 변수 (LLM GPU 가속 시 필수)
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 WORKDIR /app
 
-# Install dependencies
+# LLM 구동 시 시스템에서 종종 필요한 기본 C/C++ 런타임 설치 지원
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install dependencies (GPU용 PyTorch가 우선 설치되도록 .txt내용이 수정됨)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
