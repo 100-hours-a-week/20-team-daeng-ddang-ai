@@ -10,13 +10,6 @@ concurrency:
   group: ai-orchestrator-rollback-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  MESSAGE: >-
-    ${{
-      github.event.head_commit.message ||
-      github.workflow
-    }}
-
 jobs:
   guard:
     name: Guard
@@ -28,167 +21,133 @@ jobs:
             exit 1
           fi
 
-  prepare:
-    name: Prepare
+  rollback:
+    name: Rollback
     runs-on: ubuntu-latest
     needs: guard
-    timeout-minutes: 5
+    timeout-minutes: 10
+
+    outputs:
+      rb_start: ${{ steps.rb_time.outputs.start }}
+      rb_end: ${{ steps.rb_time_end.outputs.end }}
 
     steps:
-      - name: Prepare rollback to backup link
-        uses: appleboy/ssh-action@v1.2.4
+      - name: Mark Rollback start
+        id: rb_time
+        run: echo "start=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout (for rollback.sh)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            ai-orchestrator/rollback.sh
+          sparse-checkout-cone-mode: false
+
+      - name: Upload to VM Instance
+        id: scp
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.AI_HOST }}
           username: ${{ secrets.AI_USERNAME }}
           key: ${{ secrets.AI_SSH_KEY }}
-          port: ${{ secrets.AI_PORT }}
-          script: |
-            set -euo pipefail
+          source: ai-orchestrator/
+          target: "/tmp"
 
-            AI_DIR="${{ secrets.AI_DIR }}"
-            CURRENT_LINK="${AI_DIR}/current"
-            BACKUP_LINK="${AI_DIR}/backup"
-
-            echo "🌐 AI 서버에서 backup으로 롤백(prepare)을 진행합니다."
-
-            if [ ! -e "${CURRENT_LINK}" ] || [ ! -e "${BACKUP_LINK}" ]; then
-              echo "❌ current/backup 링크가 없습니다."
-              echo "  current=${CURRENT_LINK}"
-              echo "  backup=${BACKUP_LINK}"
-              exit 1
-            fi
-
-            BACKUP_RELEASE="$(readlink -f "${BACKUP_LINK}" || true)"
-            CURRENT_RELEASE="$(readlink -f "${CURRENT_LINK}" || true)"
-
-            if [ -z "${BACKUP_RELEASE}" ] || [ ! -d "${BACKUP_RELEASE}" ]; then
-              echo "❌ backup release가 유효하지 않습니다: ${BACKUP_RELEASE}"
-              exit 1
-            fi
-            if [ -z "${CURRENT_RELEASE}" ] || [ ! -d "${CURRENT_RELEASE}" ]; then
-              echo "❌ current release가 유효하지 않습니다: ${CURRENT_RELEASE}"
-              exit 1
-            fi
-
-            ln -sfn "${BACKUP_RELEASE}" "${CURRENT_LINK}"
-            ln -sfn "${CURRENT_RELEASE}" "${BACKUP_LINK}"
-
-            echo "✅ prepare 완료"
-            echo "  current -> ${BACKUP_RELEASE}"
-            echo "  backup  -> ${CURRENT_RELEASE}"
-
-  perform:
-    name: Perform
-    runs-on: ubuntu-latest
-    needs: [guard, prepare]
-    timeout-minutes: 15
-
-    steps:
-      - name: Perform Rollback
-        id: perform_rollback
+      - name: Rollback
+        id: rollback
         uses: appleboy/ssh-action@v1.2.4
+        env:
+          DOCKER_IMAGE: ${{ secrets.DOCKER_IMAGE }}
+          ENV_FILE_B64: ${{ secrets.ENV_FILE_B64 }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         with:
           host: ${{ secrets.AI_HOST }}
           username: ${{ secrets.AI_USERNAME }}
           key: ${{ secrets.AI_SSH_KEY }}
-          port: ${{ secrets.AI_PORT }}
+          envs: DOCKER_IMAGE,ENV_FILE_B64,DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
           script: |
             set -euo pipefail
 
             AI_DIR="${{ secrets.AI_DIR }}"
-            CURRENT_LINK="${AI_DIR}/current"
+            mkdir -p "${AI_DIR}"
+            cd "${AI_DIR}"
 
-            APP_NAME="app-ai"
-            APP_MODULE="app.main:app"
-            PORT="8000"
+            cp -f /tmp/ai-orchestrator/rollback.sh "${AI_DIR}/rollback.sh"
+            chmod +x "${AI_DIR}/rollback.sh"
 
-            echo "🚀 perform 단계: current 기준으로 의존성/프로세스 재기동"
+            export IMAGE="${DOCKER_IMAGE}"
+            export ENV_FILE_B64="${ENV_FILE_B64}"
+            export DOCKERHUB_USERNAME="${DOCKERHUB_USERNAME}"
+            export DOCKERHUB_TOKEN="${DOCKERHUB_TOKEN}"
 
-            if [ ! -e "${CURRENT_LINK}" ]; then
-              echo "❌ current 링크가 없습니다: ${CURRENT_LINK}"
-              exit 1
-            fi
+            ./rollback.sh
 
-            umask 022
-            echo "${{ secrets.ENV_FILE_B64 }}" | base64 -d > "${CURRENT_LINK}/.env"
-
-            if [ ! -d "${AI_DIR}/venv" ]; then
-              python3 -m venv "${AI_DIR}/venv"
-            fi
-
-            "${AI_DIR}/venv/bin/python" -m pip install --upgrade pip wheel setuptools
-
-            if [ -f "${CURRENT_LINK}/requirements.txt" ]; then
-              "${AI_DIR}/venv/bin/pip" install -r "${CURRENT_LINK}/requirements.txt"
-            else
-              echo "❌ requirements.txt not found in ${CURRENT_LINK}"
-              exit 1
-            fi
-
-            pm2 describe "${APP_NAME}" >/dev/null 2>&1 && pm2 delete "${APP_NAME}" || true
-
-            cd "${CURRENT_LINK}"
-            PORT="${PORT}" pm2 start "${AI_DIR}/venv/bin/uvicorn" \
-              --name "${APP_NAME}" \
-              --interpreter none \
-              -- \
-              "${APP_MODULE}" --host 0.0.0.0 --port "${PORT}"
-            pm2 save
-
-            echo "✅ perform 완료"
-            echo "current=$(readlink -f "${CURRENT_LINK}" || true)"
-            pm2 status || true
+      - name: Mark Rollback end
+        id: rb_time_end
+        if: always()
+        run: echo "end=$(date +%s)" >> "$GITHUB_OUTPUT"
 
   notify:
     name: Notify
     runs-on: ubuntu-latest
-    needs: [guard, prepare, perform]
+    needs: [guard, rollback]
     if: always()
 
     steps:
-      - name: Notify Discord (Rollback)
+      - name: Notify (Rollback)
         if: always()
         env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          MESSAGE: ${{ env.MESSAGE }}
-          JOB_STATUS: ${{ (needs.guard.result == 'success' && needs.prepare.result == 'success' && needs.perform.result == 'success') && 'success' || 'failure' }}
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           ACTOR: ${{ github.actor }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          GUARD: ${{ needs.guard.result }}
-          PREPARE: ${{ needs.prepare.result }}
-          PERFORM: ${{ needs.perform.result }}
+          GUARD_STATUS: ${{ needs.guard.result }}
+          ROLLBACK_STATUS: ${{ needs.rollback.result }}
+          RB_START: ${{ needs.rollback.outputs.rb_start }}
+          RB_END: ${{ needs.rollback.outputs.rb_end }}
         run: |
           set -euo pipefail
 
-          [ -z "${DISCORD_WEBHOOK_URL:-}" ] && echo "[WARN] DISCORD_WEBHOOK_URL is empty. Skip." && exit 0
+          [ -z "${WEBHOOK:-}" ] && echo "⚠️ DISCORD_WEBHOOK_URL이 공백이므로 본 단계를 스킵합니다." && exit 0
 
-          if [ "${JOB_STATUS}" = "success" ]; then color=5763719
-          else color=15548997
+          # 안전한 산술 계산용 함수
+          DURATION="N/A"
+          if [[ -n "${RB_START:-}" && -n "${RB_END:-}" ]]; then
+            DURATION="$((RB_END - RB_START))s"
+          fi
+          TIMESTAMP="${TIMESTAMP:-$(date -u +%FT%TZ)}"
+
+          if [ "${GUARD_STATUS}" != "success" ]; then
+            JOB_STATUS="${GUARD_STATUS}"
+          else
+            JOB_STATUS="${ROLLBACK_STATUS}"
           fi
 
-          safe_msg=$(echo "${MESSAGE}" | tr '\n' ' ' | sed 's/"/\\"/g' | head -c 200)
+          case "${JOB_STATUS}" in
+            success)   TITLE="✅ [AI] Rollback Success"; COLOR=5763719 ;;
+            failure)   TITLE="❌ [AI] Rollback Failed"; COLOR=15548997 ;;
+            cancelled) TITLE="⚠️ [AI] Rollback Cancelled"; COLOR=16776988 ;;
+            *)         TITLE="❓ [AI] Rollback Status: ${JOB_STATUS}"; COLOR=9807270 ;;
+          esac
 
-          payload=$(cat <<JSON
+          JSON_PAYLOAD=$(cat <<JSON
           {
             "embeds": [
               {
-                "title": "[AI] Rollback ${JOB_STATUS}",
-                "url": "${RUN_URL}",
-                "color": ${color},
-                "description": "${safe_msg}",
+                "title": "$TITLE",
+                "url": "$RUN_URL",
+                "color": $COLOR,
                 "fields": [
-                  {"name":"Release ID","value":"backup","inline":true},
                   {"name":"Actor","value":"${ACTOR}","inline":true},
-                  {"name":"Branch","value":"${GITHUB_REF_NAME}","inline":true},
-                  {"name":"Guard","value":"\`${GUARD}\`","inline":true},
-                  {"name":"Prepare","value":"\`${PREPARE}\`","inline":true},
-                  {"name":"Perform","value":"\`${PERFORM}\`","inline":true}
+                  {"name":"Duration","value":"${DURATION}","inline":true},
+                  {"name":"Guard","value":"\`${GUARD_STATUS}\`","inline":true},
+                  {"name":"Rollback","value":"\`${ROLLBACK_STATUS}\`","inline":true}
                 ],
-                "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+                "timestamp": "$TIMESTAMP"
               }
             ]
           }
           JSON
           )
 
-          curl -sS -X POST -H "Content-Type: application/json" --data-binary "$payload" "${DISCORD_WEBHOOK_URL}" >/dev/null
+          curl -sS -X POST -H "Content-Type: application/json" --data-binary "$JSON_PAYLOAD" "$WEBHOOK" || true
