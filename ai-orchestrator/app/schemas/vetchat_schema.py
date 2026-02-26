@@ -18,37 +18,30 @@ class VetUserContext(BaseModel):
     breed:         Optional[str]   = Field(None, description="견종")
 
 
-# 추론 옵션
-class VetChatOptions(BaseModel):
-    use_rag:     bool  = Field(True,  description="RAG 검색 사용 여부")
-    max_tokens:  int   = Field(512,   description="최대 생성 토큰 수")
-    temperature: float = Field(0.4,   description="생성 온도")
-
-
-# POST /internal/ai/vet/chat 요청 스키마 (chatbot.md 3-3절 기준)
+# POST /api/vet/chat 요청 스키마
 class VetChatRequest(BaseModel):
-    conversation_id: str                   = Field(...,   description="대화 세션 식별자")
-    message:         VetChatMessage        = Field(...,   description="이번 턴 사용자 메시지")
-    image_url:       Optional[str]         = Field(None,  description="첨부 이미지 URL (선택)")
-    history:         List[VetChatMessage]  = Field(default_factory=list, description="이전 대화 기록")
-    user_context:    Optional[VetUserContext] = Field(None, description="반려견 기본 정보")
-    options:         Optional[VetChatOptions] = Field(None, description="추론 옵션")
+    dog_id:          int                           = Field(...,   description="반려견 식별자")
+    conversation_id: str                           = Field(...,   description="대화 세션 식별자")
+    message:         VetChatMessage                = Field(...,   description="이번 턴 사용자 메시지")
+    image_url:       Optional[str]                 = Field(None,  description="첨부 이미지 URL (선택)")
+    history:         List[VetChatMessage]          = Field(default_factory=list, description="이전 대화 기록")
+    user_context:    Optional[VetUserContext]      = Field(None, description="반려견 기본 정보")
 
 
 # RAG 인용 문서
 class VetCitation(BaseModel):
-    doc_id:   str   = Field(..., description="문서 ID")
-    chunk_id: Optional[str] = Field(None, description="청크 ID")
+    doc_id:   str           = Field(..., description="문서 ID")
     title:    Optional[str] = Field(None, description="문서 제목")
-    score:    float = Field(1.0, description="유사도 점수")
-    snippet:  str   = Field(..., description="관련 발췌문")
+    score:    float         = Field(1.0, description="유사도 점수")
+    snippet:  str           = Field(..., description="관련 발췌문")
 
 
-# POST /internal/ai/vet/chat 응답 스키마 (chatbot.md 3-3절 기준)
+# POST /api/vet/chat 응답 스키마
 class VetChatResponse(BaseModel):
-    conversation_id: str                  = Field(...,  description="대화 세션 식별자")
-    answered_at:     str                  = Field(...,  description="응답 생성 시각 (ISO 8601)")
-    answer:          str                  = Field(...,  description="챗봇 답변 본문")
-    citations:       List[VetCitation]    = Field(default_factory=list, description="RAG 인용 문서 목록")
-    processing:      Optional[Dict[str, Any]] = Field(None, description="처리 메타데이터")
-    error_code:      Optional[str]        = Field(None, description="에러 코드 (실패 시에만 값 있음)")
+    dog_id:          int                    = Field(...,  description="반려견 식별자")
+    conversation_id: Optional[str]          = Field(None, description="대화 세션 식별자")
+    answered_at:     Optional[str]          = Field(None, description="응답 생성 시각 (ISO 8601)")
+    answer:          Optional[str]          = Field(None, description="챗봇 답변 본문")
+    citations:       List[VetCitation]      = Field(default_factory=list, description="RAG 인용 문서 목록")
+    processing:      Optional[Dict[str, Any]] = Field(None, description="처리 메타데이터 (디버그 모드 전용)")
+    error_code:      Optional[str]          = Field(None, description="에러 코드 (실패 시에만 값 있음)")

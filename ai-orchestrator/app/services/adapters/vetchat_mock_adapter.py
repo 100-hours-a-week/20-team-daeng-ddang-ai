@@ -4,6 +4,7 @@ from __future__ import annotations
 import datetime
 import uuid
 
+from app.core.config import DEBUG
 from app.schemas.vetchat_schema import VetChatRequest, VetChatResponse, VetCitation
 from app.services.adapters.vetchat_adapter import VetChatAdapter
 
@@ -33,21 +34,26 @@ class VetChatMockAdapter(VetChatAdapter):
         mock_citations = [
             VetCitation(
                 doc_id="mock_doc_001",
-                chunk_id="chunk_001",
                 title="수의학 일반 지식 (Mock)",
                 score=0.95,
                 snippet="반려견 증상에 따른 일반적인 권고사항... (Mock)",
             ),
         ]
 
+        processing = None
+        if DEBUG:
+            processing = {
+                "latency_ms": 42,
+                "model_used": "mock_adapter",
+                "note": "Mock Adapter — chatbot-service 미연결 상태",
+            }
+
         return VetChatResponse(
+            dog_id=req.dog_id,
             conversation_id=req.conversation_id,
             answered_at=now,
             answer=mock_answer,
             citations=mock_citations,
-            processing={
-                "latency_ms": 42,
-                "model_used": "mock_adapter",
-                "note": "Mock Adapter — chatbot-service 미연결 상태",
-            },
+            processing=processing,
+            error_code=None,
         )

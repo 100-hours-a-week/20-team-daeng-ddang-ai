@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import requests
 
-from app.core.config import CHATBOT_SERVICE_URL, CHATBOT_HTTP_TIMEOUT_SECONDS
+from app.core.config import CHATBOT_SERVICE_URL, CHATBOT_HTTP_TIMEOUT_SECONDS, DEBUG
 from app.schemas.vetchat_schema import VetChatRequest, VetChatResponse, VetCitation
 from app.services.adapters.vetchat_adapter import VetChatAdapter
 
@@ -18,8 +18,8 @@ class VetChatHttpAdapter(VetChatAdapter):
         url = f"{self.base_url}/api/vet/chat"
 
         # ai-orchestrator → chatbot-service 페이로드 변환
-        # (orchestrator 내부 스키마 → chatbot-service 스키마)
         payload = {
+            "dog_id": req.dog_id,
             "conversation_id": req.conversation_id,
             "message": req.message.content,
             "image_url": req.image_url,
@@ -27,33 +27,47 @@ class VetChatHttpAdapter(VetChatAdapter):
             "user_context": req.user_context.model_dump() if req.user_context else None,
         }
 
-        r = requests.post(url, json=payload, timeout=CHATBOT_HTTP_TIMEOUT_SECONDS)
-        r.raise_for_status()
-        data = r.json()
-
-        # chatbot-service 응답을 VetChatResponse로 직접 파싱 시도
         try:
-            return VetChatResponse(**data)
-        except Exception:
-            pass
+            r = requests.post(url, json=payload, timeout=CHATBOT_HTTP_TIMEOUT_SECONDS)
+            r.raise_for_status()
+            data = r.json()
 
-        # Fallback: 필드 직접 매핑
-        citations = [
-            VetCitation(
-                doc_id=c.get("doc_id", "unknown"),
-                chunk_id=c.get("chunk_id"),
-                title=c.get("title"),
-                score=float(c.get("score", 1.0)),
-                snippet=c.get("snippet", ""),
+            # chatbot-service 응답을 VetChatResponse로 직접 파싱 시도
+            try:
+                if "dog_id" not in data:
+                    data["dog_id"] = req.dog_id
+                
+                # DEBUG 모드가 아니면 processing 제거 (Pydantic 객체 생성 전 data에서 가공)
+                if not DEBUG:
+                    data.pop("processing", None)
+                
+                return VetChatResponse(**data)
+            except Exception:
+                pass
+
+            # Fallback: 필드 직접 매핑
+            citations = [
+                VetCitation(
+                    doc_id=c.get("doc_id", "unknown"),
+                    title=c.get("title"),
+                    score=float(c.get("score", 1.0)),
+                    snippet=c.get("snippet", ""),
+                )
+                for c in data.get("citations", [])
+            ]
+
+            return VetChatResponse(
+                dog_id=data.get("dog_id", req.dog_id),
+                conversation_id=data.get("conversation_id", req.conversation_id),
+                answered_at=data.get("answered_at"),
+                answer=data.get("answer"),
+                citations=citations,
+                processing=data.get("processing") if DEBUG else None,
+                error_code=data.get("error_code"),
             )
-            for c in data.get("citations", [])
-        ]
-
-        return VetChatResponse(
-            conversation_id=data.get("conversation_id", req.conversation_id),
-            answered_at=data.get("answered_at", ""),
-            answer=data.get("answer", ""),
-            citations=citations,
-            processing=data.get("processing") or {"note": "http_adapter_fallback"},
-            error_code=data.get("error_code"),
-        )
+        except Exception as e:
+            # 에러 발생 시 error_code 반환 (나머지는 null)
+            return VetChatResponse(
+                dog_id=req.dog_id,
+                error_code=f"HTTP_ADAPTER_ERROR: {str(e)}"
+            )

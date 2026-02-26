@@ -9,7 +9,7 @@ from app.services.vetchat_service import chat_sync
 router = APIRouter(prefix="/api/vet", tags=["vetchat"])
 
 
-@router.post("/chat", response_model=VetChatResponse)
+@router.post("/chat", response_model=VetChatResponse, response_model_exclude_none=True)
 def vet_chat(req: VetChatRequest) -> VetChatResponse:
     """
     Backend → Orchestrator 내부 챗봇 상담 엔드포인트 (동기).
