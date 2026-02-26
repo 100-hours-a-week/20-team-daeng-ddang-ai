@@ -59,7 +59,7 @@ def generate_chat_response(req: ChatRequest) -> ChatResponse:
     history_list = [{"role": m.role, "content": m.content} for m in req.history]
 
     result = engine.generate_answer(
-        message=req.message,
+        message=req.message.content,
         user_context=user_context_dict,
         history=history_list,
     )
