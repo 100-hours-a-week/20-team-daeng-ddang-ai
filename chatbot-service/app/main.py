@@ -43,14 +43,14 @@ app = FastAPI(
 @app.post("/api/vet/chat", response_model=ChatResponse)
 def chat(req: ChatRequest) -> ChatResponse:
     """사용자 질문(text)과 선택 image_url을 받아 수의사 상담 답변 생성"""
-    if not req.message or not req.message.strip():
+    if not req.message or not req.message.content.strip():
         raise HTTPException(
             status_code=400,
             detail={
                 "error": {
                     "code": "INVALID_INPUT",
                     "message": "질문 내용이 비어 있습니다.",
-                    "details": {"field": "message"},
+                    "details": {"field": "message.content"},
                 }
             },
         )
