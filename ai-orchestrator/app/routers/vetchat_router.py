@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from app.schemas.vetchat_schema import VetChatRequest, VetChatResponse
 from app.services.vetchat_service import chat_sync
 
-router = APIRouter(prefix="/internal/ai/vet", tags=["vetchat"])
+router = APIRouter(prefix="/api/vet", tags=["vetchat"])
 
 
 @router.post("/chat", response_model=VetChatResponse)
