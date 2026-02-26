@@ -21,7 +21,7 @@ class VetChatHttpAdapter(VetChatAdapter):
         payload = {
             "dog_id": req.dog_id,
             "conversation_id": req.conversation_id,
-            "message": req.message.content,
+            "message": {"role": req.message.role, "content": req.message.content},
             "image_url": req.image_url,
             "history": [{"role": m.role, "content": m.content} for m in req.history],
             "user_context": req.user_context.model_dump() if req.user_context else None,
@@ -66,8 +66,15 @@ class VetChatHttpAdapter(VetChatAdapter):
                 error_code=data.get("error_code"),
             )
         except Exception as e:
-            # 에러 발생 시 error_code 반환 (나머지는 null)
+            # 에러 발생 시 상세 정보 포함 (특히 422 Unprocessable Entity 대응)
+            err_msg = str(e)
+            if hasattr(e, 'response') and e.response is not None:
+                try:
+                    err_msg += f" | Details: {e.response.text}"
+                except:
+                    pass
+            
             return VetChatResponse(
                 dog_id=req.dog_id,
-                error_code=f"HTTP_ADAPTER_ERROR: {str(e)}"
+                error_code=f"HTTP_ADAPTER_ERROR: {err_msg}"
             )
