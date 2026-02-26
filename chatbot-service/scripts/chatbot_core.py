@@ -4,9 +4,10 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
+from huggingface_hub import snapshot_download
 
 class VetChatbotCore:
-    def __init__(self, base_model_id="Qwen/Qwen2.5-7B-Instruct", adapter_path="models/lora-qwen-7b-final", chroma_db_dir="models/chroma_db"):
+    def __init__(self, base_model_id="Qwen/Qwen2.5-7B-Instruct", adapter_path="models/Qwen2.5-7B/7B-LoRA", chroma_db_dir="models/chroma_db"):
         self.base_model_id = base_model_id
         self.adapter_path = adapter_path
         self.chroma_db_dir = chroma_db_dir
@@ -17,24 +18,69 @@ class VetChatbotCore:
         
         self._initialize()
 
+    def _download_hf_assets(self, hf_token):
+        """HuggingFace Private 리포지토리에서 chroma_db와 LoRA 가중치를 로컬 models/ 폴더로 다운로드"""
+        repo_id = "20-team-daeng-ddang-ai/vet-chat"
+        local_dir = "models"
+        
+        needs_download = False
+        if not os.path.exists(self.chroma_db_dir):
+            print(f"⚠️ Chroma DB not found at {self.chroma_db_dir}.")
+            needs_download = True
+        if self.adapter_path and not os.path.exists(self.adapter_path):
+            print(f"⚠️ LoRA Adapter not found at {self.adapter_path}.")
+            needs_download = True
+            
+        if needs_download:
+            print(f"📥 Downloading required assets from {repo_id} into '{local_dir}/'...")
+            try:
+                snapshot_download(
+                    repo_id=repo_id,
+                    allow_patterns=["chroma_db/*", "Qwen2.5-7B/7B-LoRA/*"],
+                    local_dir=local_dir,
+                    token=hf_token
+                )
+                print("✅ Download complete.")
+            except Exception as e:
+                print(f"❌ Failed to download assets: {e}")
+
     def _initialize(self):
+        hf_token = os.getenv("HUGGING_FACE_HUB_TOKEN")
+        
+        # 모델 구동 전 허깅페이스에서 로컬 파일(models/)로 강제 다운로드
+        self._download_hf_assets(hf_token)
+
         print(f"Loading tokenizer & models... (Base: {self.base_model_id}, Adapter: {self.adapter_path})")
-        self.tokenizer = AutoTokenizer.from_pretrained(self.base_model_id)
+        
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.base_model_id, 
+            token=hf_token
+        )
         
         # Load Base Model
         base_model = AutoModelForCausalLM.from_pretrained(
             self.base_model_id,
             device_map="auto",
             torch_dtype=torch.bfloat16, 
+            token=hf_token
         )
         
         # Inject LoRA Adapter
-        if os.path.exists(self.adapter_path):
-            self.model = PeftModel.from_pretrained(base_model, self.adapter_path)
-            print("✅ LoRA Adapter loaded successfully.")
+        # 만약 로컬 폴더이거나 '/' 문자가 포함된 허깅페이스 레포지토리 주소라면 어댑터 로드를 시도합니다.
+        if self.adapter_path and (os.path.exists(self.adapter_path) or "/" in self.adapter_path):
+            try:
+                self.model = PeftModel.from_pretrained(
+                    base_model, 
+                    self.adapter_path,
+                    token=hf_token
+                )
+                print("✅ LoRA Adapter loaded successfully.")
+            except Exception as e:
+                print(f"⚠️ Failed to load LoRA Adapter '{self.adapter_path}': {e}. Running with Base Model only.")
+                self.model = base_model
         else:
             self.model = base_model
-            print("⚠️ LoRA Adapter not found. Running with Base Model only.")
+            print("⚠️ No valid LoRA Adapter path provided. Running with Base Model only.")
 
         print("Loading Vector DB...")
         embeddings = HuggingFaceEmbeddings(model_name="jhgan/ko-sroberta-multitask")
