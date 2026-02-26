@@ -111,7 +111,11 @@ class DogHealthAnalyzer:
 
         overlay_filename = f"overlay_{analysis_id}.mp4"
         overlay_path = os.path.join(self.output_dir, overlay_filename)
-        out = cv2.VideoWriter(overlay_path, cv2.VideoWriter_fourcc(*'avc1'), fps, (width, height))
+        temp_overlay_path = os.path.join(self.output_dir, f"temp_{overlay_filename}")
+        
+        # 우분투/GCP 도커 환경에서 OpenCV의 avc1 인코더(H264)가 없거나 h264_v4l2m2m 하드웨어 오류로 
+        # 터지는 현상을 방지하기 위해 범용적인 mp4v로 먼저 저장합니다.
+        out = cv2.VideoWriter(temp_overlay_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
 
         ts = {
             "timestamps": [],
@@ -180,6 +184,21 @@ class DogHealthAnalyzer:
         cap.release()
         out.release()
         self._cleanup(temp_file)
+        
+        # 웹 브라우저 호환성을 위해 mp4v 포맷을 h264(libx264)로 강제 변환
+        import subprocess
+        try:
+            print(f"Converting video to Web-Compatible H.264 format via FFmpeg...")
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", temp_overlay_path, "-vcodec", "libx264", overlay_path], 
+                check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            if os.path.exists(temp_overlay_path):
+                os.remove(temp_overlay_path)
+        except Exception as e:
+            print(f"⚠️ FFmpeg H.264 conversion failed: {e}. Falling back to standard mp4v.")
+            if os.path.exists(temp_overlay_path):
+                os.rename(temp_overlay_path, overlay_path)
         
         # Check if dog was detected
         if valid_frames < 10:
