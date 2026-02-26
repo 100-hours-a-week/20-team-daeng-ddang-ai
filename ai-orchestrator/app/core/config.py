@@ -14,3 +14,8 @@ FACE_JOB_MODE = os.getenv("FACE_JOB_MODE", "off").lower()
 HEALTHCARE_MODE = os.getenv("HEALTHCARE_MODE", "http").lower()
 HEALTHCARE_SERVICE_URL = os.getenv("HEALTHCARE_SERVICE_URL", "http://localhost:8200").rstrip("/")
 HEALTHCARE_HTTP_TIMEOUT_SECONDS = float(os.getenv("HEALTHCARE_HTTP_TIMEOUT_SECONDS", "60"))
+
+# Chatbot Service Config
+CHATBOT_MODE = os.getenv("CHATBOT_MODE", "mock").lower()
+CHATBOT_SERVICE_URL = os.getenv("CHATBOT_SERVICE_URL", "http://localhost:8300").rstrip("/")
+CHATBOT_HTTP_TIMEOUT_SECONDS = float(os.getenv("CHATBOT_HTTP_TIMEOUT_SECONDS", "30"))

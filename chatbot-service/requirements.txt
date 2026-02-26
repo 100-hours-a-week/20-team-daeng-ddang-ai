@@ -1,0 +1,22 @@
+fastapi==0.128.0
+uvicorn==0.40.0
+pydantic==2.12.5
+python-dotenv==1.2.1
+requests==2.32.5
+
+# ================================
+# LLM/RAG AI 의존성 (GPU 클라우드 T4/L4 호환)
+# ================================
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch==2.5.1
+torchvision==0.20.1
+
+# Transformer/HuggingFace Eco
+transformers
+peft
+accelerate
+
+# RAG & Embedding Docs
+langchain-chroma
+langchain-huggingface
+sentence-transformers
