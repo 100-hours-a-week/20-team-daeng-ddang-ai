@@ -24,6 +24,8 @@ import argparse
 import time
 import json
 import asyncio
+from datetime import datetime
+from pathlib import Path
 
 import requests
 import httpx
@@ -50,7 +52,7 @@ def build_payload(endpoint: str):
         raise ValueError(endpoint)
 
 
-def sync_worker(endpoints: list[str], count: int):
+def sync_worker(endpoints: list[str], count: int) -> dict[str, list[float]]:
     # perform `count` requests for each endpoint sequentially
     overall_stats: dict[str, list[float]] = {ep: [] for ep in endpoints}
 
@@ -74,6 +76,8 @@ def sync_worker(endpoints: list[str], count: int):
     for ep, times in overall_stats.items():
         print(f"\nEndpoint '{ep}':")
         print_summary(times, "sync")
+    
+    return overall_stats
 
 
 def print_summary(times, mode: str):
@@ -86,7 +90,34 @@ def print_summary(times, mode: str):
     print(f"  max      : {max(times):.2f}s")
 
 
-async def async_worker(endpoints: list[str], count: int):
+def save_results(overall_stats: dict[str, list[float]], mode: str, output_path: str):
+    """Save benchmark results to JSON file."""
+    result_data = {
+        "timestamp": datetime.now().isoformat(),
+        "mode": mode,
+        "endpoints": {}
+    }
+    
+    for ep, times in overall_stats.items():
+        if times:
+            result_data["endpoints"][ep] = {
+                "count": len(times),
+                "total_seconds": round(sum(times), 2),
+                "average_seconds": round(sum(times) / len(times), 2),
+                "min_seconds": round(min(times), 2),
+                "max_seconds": round(max(times), 2)
+            }
+    
+    # ensure output directory exists
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(output_path, "w") as f:
+        json.dump(result_data, f, indent=2)
+    
+    print(f"\n✅ Results saved to: {output_path}")
+
+
+async def async_worker(endpoints: list[str], count: int) -> dict[str, list[float]]:
     # send `count` concurrent requests to each endpoint
     overall_stats: dict[str, list[float]] = {ep: [] for ep in endpoints}
 
@@ -119,6 +150,8 @@ async def async_worker(endpoints: list[str], count: int):
     for ep, times in overall_stats.items():
         print(f"\nEndpoint '{ep}':")
         print_summary(times, "async")
+    
+    return overall_stats
 
 
 def main():
@@ -131,11 +164,20 @@ def main():
                         help="number of requests per endpoint")
     parser.add_argument("--async", dest="use_async", action="store_true",
                         help="send requests concurrently")
+    parser.add_argument("--output", "-o", type=str, default=None,
+                        help="save results to JSON file (e.g., results.json)")
     args = parser.parse_args()
+    
+    mode = "async" if args.use_async else "sync"
+    
     if args.use_async:
-        asyncio.run(async_worker(args.endpoints, args.count))
+        results = asyncio.run(async_worker(args.endpoints, args.count))
     else:
-        sync_worker(args.endpoints, args.count)
+        results = sync_worker(args.endpoints, args.count)
+    
+    # save results if output path is specified
+    if args.output:
+        save_results(results, mode, args.output)
 
 
 if __name__ == "__main__":
