@@ -18,7 +18,7 @@ class MetricPayload(BaseModel):
 
 class ArtifactsPayload(BaseModel):
     keypoint_overlay_video_url: Optional[str] = None
-    debug: Optional[Dict[str, Any]] = None
+    # debug: Optional[Dict[str, Any]] = None
 
 
 class HealthAnalyzeResponse(BaseModel):
@@ -30,5 +30,5 @@ class HealthAnalyzeResponse(BaseModel):
     result: Optional[Dict[str, Any]] = None
     metrics: Optional[Dict[str, MetricPayload]] = None
     artifacts: Optional[ArtifactsPayload] = None
-    processing: Optional[Dict[str, Any]] = None
+    # processing: Optional[Dict[str, Any]] = None
     error_code: Optional[str] = None
