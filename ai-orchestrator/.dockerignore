@@ -1,0 +1,39 @@
+# IDE & System
+.idea/
+.vscode/
+.DS_Store
+
+# Python build & distribution
+dist/
+build/
+*.egg-info/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment & Virtual Env
+.venv/
+env/
+venv/
+.env
+.env.example
+
+# Database (Local testing)
+*.sqlite3
+
+# Cache & Testing
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime & Metadata
+.git/
+.gitignore
+README.md
+server.pid
+*.log
+
+# Docker config (Optional)
+Dockerfile
+docker-compose.yml
+.dockerignore

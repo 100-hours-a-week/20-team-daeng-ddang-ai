@@ -1,11 +1,26 @@
 name: AI Orchestrator CI/CD
 
 on:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/ai-orchestrator-ci-cd.yml"
+      - "ai-orchestrator/**"
+      - "!ai-orchestrator/README.md"
+      - "!ai-orchestrator/.env.example"
+      - "!ai-orchestrator/.gitignore"
+      - "!ai-orchestrator/.idea/**"
+      - "!ai-orchestrator/server.pid"
   push:
     branches: ["main"]
     paths:
-      - "ai-orchestrator/**"
       - ".github/workflows/ai-orchestrator-ci-cd.yml"
+      - "ai-orchestrator/**"
+      - "!ai-orchestrator/README.md"
+      - "!ai-orchestrator/.env.example"
+      - "!ai-orchestrator/.gitignore"
+      - "!ai-orchestrator/.idea/**"
+      - "!ai-orchestrator/server.pid"
   workflow_dispatch: {}
 
 permissions:
@@ -16,9 +31,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ORCH_DIR: ai-orchestrator
   RELEASE_ID: ${{ github.sha }}
-  ARTIFACT_FILE: ai-orchestrator.tgz
+  DOCKER_IMAGE: ${{ secrets.DOCKER_IMAGE }}
   MESSAGE: >-
     ${{
       github.event.head_commit.message ||
@@ -29,19 +43,21 @@ jobs:
   ci:
     name: CI
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Mark CI start
         id: ci_time
         run: echo "start=$(date +%s)" >> "$GITHUB_OUTPUT"
-        
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          sparse-checkout: ai-orchestrator
+          sparse-checkout-cone-mode: false
 
       - name: Install ruff
-        run: |
-          pip install ruff
+        run: pip install ruff
 
       - name: Lint
         id: time_lint
@@ -52,92 +68,115 @@ jobs:
           echo "start=${start}" >> "$GITHUB_OUTPUT"
           echo "end=${end}" >> "$GITHUB_OUTPUT"
 
-      - name: Package ai-orchestrator
-        id: time_package
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub (push only)
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build
+        id: time_build
         run: |
           start=$(date +%s)
-          set -euo pipefail
-
-          test -d "${ORCH_DIR}"
-          tar -czf "${ARTIFACT_FILE}" -C "${ORCH_DIR}" .
-
+          docker build \
+           -f ai-orchestrator/Dockerfile \
+           -t "${{ env.DOCKER_IMAGE }}:${{ env.RELEASE_ID}}" \
+           ai-orchestrator
           end=$(date +%s)
           echo "start=${start}" >> "$GITHUB_OUTPUT"
           echo "end=${end}" >> "$GITHUB_OUTPUT"
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ai-orchestrator-${{ env.RELEASE_ID }}
-          path: ${{ env.ARTIFACT_FILE }}
-          if-no-files-found: error
-          retention-days: 30
+      - name: Push (push only)
+        if: github.event_name == 'push'
+        run: |
+          docker push "${{ env.DOCKER_IMAGE }}:${{ env.RELEASE_ID}}"
 
       - name: Mark CI end
         id: ci_time_end
         if: always()
         run: echo "end=$(date +%s)" >> "$GITHUB_OUTPUT"
-      
-      - name: Notify Discord (CI)
+
+      - name: Notify (CI)
         if: always()
         env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           MESSAGE: ${{ env.MESSAGE }}
           JOB_STATUS: ${{ job.status }}
           RELEASE_ID: ${{ env.RELEASE_ID }}
-          ACTOR: ${{ github.actor }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TIMESTAMP: ${{ github.event.head_commit.timestamp || github.event.pull_request.updated_at }}
+          ACTOR: ${{ github.actor }}
+          BRANCH: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+
           CI_START: ${{ steps.ci_time.outputs.start }}
           CI_END: ${{ steps.ci_time_end.outputs.end }}
           LINT_S: ${{ steps.time_lint.outputs.start }}
           LINT_E: ${{ steps.time_lint.outputs.end }}
-          PKG_S: ${{ steps.time_package.outputs.start }}
-          PKG_E: ${{ steps.time_package.outputs.end }}
+          BUILD_S: ${{ steps.time_build.outputs.start }}
+          BUILD_E: ${{ steps.time_build.outputs.end }}
         run: |
           set -euo pipefail
 
-          # DISCORD_WEBHOOK_URL 없으면 스텝 종료
-          [ -z "${DISCORD_WEBHOOK_URL:-}" ] && echo "[WARN] DISCORD_WEBHOOK_URL is empty. Skip." && exit 0
+          [ -z "${WEBHOOK:-}" ] && echo "⚠️ DISCORD_WEBHOOK_URL이 공백이므로 본 단계를 스킵합니다." && exit 0
 
           # 안전한 산술 계산용 함수
           dur() { local s="${1:-}" e="${2:-}"; [ -n "$s" ] && [ -n "$e" ] && echo $((e - s)) || echo 0; }
 
-          lint_sec="$(dur "${LINT_S:-}" "${LINT_E:-}")"
-          pkg_sec="$(dur "${PKG_S:-}" "${PKG_E:-}")"
-          ci_seconds="$(dur "${CI_START:-}" "${CI_END:-}")"
+          ci_total="$(dur "$CI_START" "$CI_END")"
+          lint_sec="$(dur "$LINT_S" "$LINT_E")"
+          build_sec="$(dur "$BUILD_S" "$BUILD_E")"
 
-          if [ "${JOB_STATUS}" = "success" ]; then color=5763719
-          elif [ "${JOB_STATUS}" = "failure" ]; then color=15548997
-          else color=9807270
+          TIMESTAMP="${TIMESTAMP:-$(date -u +%FT%TZ)}"
+
+          if [ "$JOB_STATUS" = "success" ]; then
+            TITLE="✅ [AI] CI Success"
+            COLOR=5763719
+          elif [ "$JOB_STATUS" = "cancelled" ]; then
+            TITLE="⚠️ [AI] CI Cancelled"
+            COLOR=16776988
+          elif [ "$JOB_STATUS" = "skipped" ]; then
+            TITLE="⏭️ [AI] CI Skipped"
+            COLOR=9807270
+          else
+            TITLE="❌ [AI] CI Failed"
+            COLOR=15548997
           fi
 
           # 개행 문자 및 따옴표 제거, 200자로 자름
           safe_msg=$(echo "$MESSAGE" | tr '\n' ' ' | sed 's/"/\\"/g' | head -c 200)
 
-          payload=$(cat <<JSON
+          JSON_PAYLOAD=$(cat <<JSON
           {
             "embeds": [
               {
-                "title": "[AI] CI ${JOB_STATUS}",
-                "url": "${RUN_URL}",
-                "color": ${color},
+                "title": "$TITLE",
+                "url": "$RUN_URL",
+                "color": $COLOR,
                 "description": "${safe_msg}",
                 "fields": [
                   {"name":"Release ID","value":"\`${RELEASE_ID}\`","inline":false},
-                  {"name":"Actor","value":"${ACTOR}","inline":true},
-                  {"name":"Total CI","value":"${ci_seconds}s","inline":true},
 
-                  # {"name":"Lint","value":"${lint_sec}s","inline":true},
-                  {"name":"Package","value":"${pkg_sec}s","inline":true}
+                  {"name":"Actor","value":"${ACTOR}","inline":true},
+                  {"name":"Branch","value":"${BRANCH}","inline":true},
+                  {"name": "Event Name","value":"${EVENT_NAME}","inline":true},
+
+                  {"name":"Total CI","value":"${ci_total}s","inline":true},
+                  {"name":"Lint","value":"${lint_sec}s","inline":true},
+                  {"name":"Build","value":"${build_sec}s","inline":true}
                 ],
-                "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+                "timestamp": "$TIMESTAMP"
               }
             ]
           }
           JSON
           )
 
-          curl -sS -X POST -H "Content-Type: application/json" --data-binary "$payload" "${DISCORD_WEBHOOK_URL}" >/dev/null
+          curl -sS -X POST -H "Content-Type: application/json" --data-binary "$JSON_PAYLOAD" "$WEBHOOK" || true
 
   cd:
     name: CD
@@ -145,154 +184,132 @@ jobs:
     needs: ci
     timeout-minutes: 15
 
+    if: github.event_name == 'push' && github.ref_name == 'main'
+
     steps:
       - name: Mark CD start
         id: cd_time
         run: echo "start=$(date +%s)" >> "$GITHUB_OUTPUT"
 
-      - name: Download artifact
-        uses: actions/download-artifact@v4
+      - name: Checkout (for docker-compose.yml, deploy.sh)
+        uses: actions/checkout@v4
         with:
-          name: ai-orchestrator-${{ env.RELEASE_ID }}
+          sparse-checkout: |
+            ai-orchestrator/deploy.sh
+            ai-orchestrator/docker-compose.yml
+          sparse-checkout-cone-mode: false
 
-      - name: Upload artifact to VM Instance
+      - name: Upload to VM Instance
         id: scp
         uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.AI_HOST }}
           username: ${{ secrets.AI_USERNAME }}
           key: ${{ secrets.AI_SSH_KEY }}
-          port: ${{ secrets.AI_PORT }}
-          source: ${{ env.ARTIFACT_FILE }}
+          source: ai-orchestrator/
           target: "/tmp"
 
       - name: Deploy
         id: deploy
         uses: appleboy/ssh-action@v1.2.4
+        env:
+          DOCKER_IMAGE: ${{ env.DOCKER_IMAGE }}
+          RELEASE_ID: ${{ env.RELEASE_ID }}
+          ENV_FILE_B64: ${{ secrets.ENV_FILE_B64 }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         with:
           host: ${{ secrets.AI_HOST }}
           username: ${{ secrets.AI_USERNAME }}
           key: ${{ secrets.AI_SSH_KEY }}
-          port: ${{ secrets.AI_PORT }}
+          envs: DOCKER_IMAGE,RELEASE_ID,ENV_FILE_B64,DOCKERHUB_USERNAME,DOCKERHUB_TOKEN
           script: |
             set -euo pipefail
 
-            RELEASE_ID="${{ env.RELEASE_ID }}"
-            ARTIFACT_FILE="${{ env.ARTIFACT_FILE }}"
-
             AI_DIR="${{ secrets.AI_DIR }}"
-            CURRENT_LINK="${AI_DIR}/current"
-            BACKUP_LINK="${AI_DIR}/backup"
-            RELEASE_DIR="${AI_DIR}/releases/${RELEASE_ID}"
+            mkdir -p "${AI_DIR}"
+            cd "${AI_DIR}"
 
-            mkdir -p "${RELEASE_DIR}"
+            cp -f /tmp/ai-orchestrator/deploy.sh "${AI_DIR}/deploy.sh"
+            cp -f /tmp/ai-orchestrator/docker-compose.yml "${AI_DIR}/docker-compose.yml"
 
-            # 1) 직전 버전 백업
-            if [ -e "${CURRENT_LINK}" ]; then
-              CURRENT_RELEASE="$(readlink -f "${CURRENT_LINK}" || true)"
-              if [ -n "${CURRENT_RELEASE}" ] && [ -d "${CURRENT_RELEASE}" ]; then
-                ln -sfn "${CURRENT_RELEASE}" "${BACKUP_LINK}"
-              fi
-            fi
+            chmod +x ./deploy.sh
 
-            # 2) 새 릴리즈 압축 해제
-            tar -xzf "/tmp/${ARTIFACT_FILE}" -C "${RELEASE_DIR}"
-            rm -f "/tmp/${ARTIFACT_FILE}"
+            export IMAGE="${DOCKER_IMAGE}"
+            export RELEASE_ID="${RELEASE_ID}"
+            export ENV_FILE_B64="${ENV_FILE_B64}"
+            export DOCKERHUB_USERNAME="${DOCKERHUB_USERNAME}"
+            export DOCKERHUB_TOKEN="${DOCKERHUB_TOKEN}"
 
-            # 3) current 교체
-            ln -sfn "${RELEASE_DIR}" "${CURRENT_LINK}"
-
-            # 4) env 생성
-            umask 022
-            echo "${{ secrets.ENV_FILE_B64 }}" | base64 -d > "${CURRENT_LINK}/.env"
-
-            # 5) venv 준비
-            if [ ! -d "${AI_DIR}/venv" ]; then
-              python3 -m venv "${AI_DIR}/venv"
-            fi
-
-            "${AI_DIR}/venv/bin/python" -m pip install --upgrade pip wheel setuptools
-
-            # 6) requirements 설치
-            if [ -f "${CURRENT_LINK}/requirements.txt" ]; then
-              "${AI_DIR}/venv/bin/pip" install -r "${CURRENT_LINK}/requirements.txt"
-            else
-              echo "ERROR: requirements.txt not found in ${CURRENT_LINK}"
-              exit 1
-            fi
-
-            # 7) PM2로 uvicorn 실행
-            APP_NAME="app-ai"
-            APP_MODULE="app.main:app"
-            PORT="8000"
-
-            pm2 describe "${APP_NAME}" >/dev/null 2>&1 && pm2 delete "${APP_NAME}" || true
-
-            cd "${CURRENT_LINK}"
-            PORT="${PORT}" pm2 start "${AI_DIR}/venv/bin/uvicorn" \
-              --name "${APP_NAME}" \
-              --interpreter none \
-              -- \
-              "${APP_MODULE}" --host 0.0.0.0 --port "${PORT}"
-            pm2 save
+            ./deploy.sh
 
       - name: Mark CD end
         id: cd_time_end
         if: always()
         run: echo "end=$(date +%s)" >> "$GITHUB_OUTPUT"
 
-      - name: Notify Discord (CD)
+      - name: Notify (CD)
         if: always()
         env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           MESSAGE: ${{ env.MESSAGE }}
-          CD_START: ${{ steps.cd_time.outputs.start }}
-          CD_END: ${{ steps.cd_time_end.outputs.end }}
           JOB_STATUS: ${{ job.status }}
           RELEASE_ID: ${{ env.RELEASE_ID }}
-          ACTOR: ${{ github.actor }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          SCP_OUTCOME: ${{ steps.scp.outcome }}
-          DEPLOY_OUTCOME: ${{ steps.deploy.outcome }}
+          TIMESTAMP: ${{ github.event.head_commit.timestamp }}
+          ACTOR: ${{ github.actor }}
+          BRANCH: ${{ github.ref_name }}
+          CD_START: ${{ steps.cd_time.outputs.start }}
+          CD_END: ${{ steps.cd_time_end.outputs.end }}
         run: |
           set -euo pipefail
-      
-          # DISCORD_WEBHOOK_URL 없으면 스텝 종료
-          [ -z "${DISCORD_WEBHOOK_URL:-}" ] && echo "[WARN] DISCORD_WEBHOOK_URL is empty. Skip." && exit 0
+
+          [ -z "${WEBHOOK:-}" ] && echo "⚠️ DISCORD_WEBHOOK_URL이 공백이므로 본 단계를 스킵합니다." && exit 0
 
           # 안전한 산술 계산용 함수
           dur() { local s="${1:-}" e="${2:-}"; [ -n "$s" ] && [ -n "$e" ] && echo $((e - s)) || echo 0; }
-          cd_seconds="$(dur "${CD_START:-}" "${CD_END:-}")"
 
-          if [ "${JOB_STATUS}" = "success" ]; then color=5763719
-          elif [ "${JOB_STATUS}" = "failure" ]; then color=15548997
-          else color=9807270
+          cd_total="$(dur "$CD_START" "$CD_END")"
+
+          TIMESTAMP="${TIMESTAMP:-$(date -u +%FT%TZ)}"
+
+          if [ "$JOB_STATUS" = "success" ]; then
+            TITLE="✅ [AI] CD Success"
+            COLOR=5763719
+          elif [ "$JOB_STATUS" = "cancelled" ]; then
+            TITLE="⚠️ [AI] CD Cancelled"
+            COLOR=16776988
+          elif [ "$JOB_STATUS" = "skipped" ]; then
+            TITLE="⏭️ [AI] CD Skipped"
+            COLOR=9807270
+          else
+            TITLE="❌ [AI] CD Failed"
+            COLOR=15548997
           fi
 
           # 개행 문자 및 따옴표 제거, 200자로 자름
           safe_msg=$(echo "$MESSAGE" | tr '\n' ' ' | sed 's/"/\\"/g' | head -c 200)
 
-          payload=$(cat <<JSON
+          JSON_PAYLOAD=$(cat <<JSON
           {
             "embeds": [
               {
-                "title": "[AI] CD ${JOB_STATUS}",
-                "url": "${RUN_URL}",
-                "color": ${color},
+                "title": "$TITLE",
+                "url": "$RUN_URL",
+                "color": $COLOR,
                 "description": "${safe_msg}",
                 "fields": [
                   {"name":"Release ID","value":"\`${RELEASE_ID}\`","inline":false},
-                  {"name":"Actor","value":"${ACTOR}","inline":true},
-                  {"name":"Total CD","value":"${cd_seconds}s","inline":true},
 
-                  {"name":"Upload (SCP)","value":"${SCP_OUTCOME}","inline":true},
-                  {"name":"Deploy (SSH)","value":"${DEPLOY_OUTCOME}","inline":true}
+                  {"name":"Actor","value":"${ACTOR}","inline":true},
+                  {"name":"Branch","value":"${BRANCH}","inline":true},
+                  {"name":"Total CD","value":"${cd_total}s","inline":true}
                 ],
-                "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+                "timestamp": "$TIMESTAMP"
               }
             ]
           }
           JSON
           )
 
-          curl -sS -X POST -H "Content-Type: application/json" --data-binary "$payload" "${DISCORD_WEBHOOK_URL}" >/dev/null
+          curl -sS -X POST -H "Content-Type: application/json" --data-binary "$JSON_PAYLOAD" "$WEBHOOK" || true
