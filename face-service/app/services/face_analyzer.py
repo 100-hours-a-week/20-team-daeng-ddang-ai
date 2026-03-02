@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import threading
 import tempfile
 import cv2
 import torch
@@ -80,6 +81,8 @@ logger = logging.getLogger(__name__)
 # 4. 앙상블 (Confidence Weighted) 및 나레이션 생성
 class FaceAnalyzer:
     def __init__(self):
+        # Ultralytics YOLO 내부 상태 변경(fuse/setup) 구간의 동시 접근을 방지
+        self._analyze_lock = threading.Lock()
         self._ensure_dependencies()
         self._authenticate_hf()
         
@@ -213,90 +216,91 @@ class FaceAnalyzer:
     # 4. 결과 앙상블 (Margin Weighted Voting)
     # 5. 나레이션 생성 및 응답 구성
     def analyze(self, request_id: str, req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
-        if DEBUG:
-            logger.debug(f"[{request_id}] 분석 시작: {req.video_url}")
-        
-        start_time = time.time()
-        tmp_video_path = None
-        
-        try:
-            # 1. Download Video
-            tmp_video_path = self._download_video(req.video_url, request_id)
-            
-            # 2. Extract & Process Frames
-            # 최대 12프레임까지 처리 가능
-            frame_results, total_processed_count = self._process_video(tmp_video_path, request_id)
-            
-            # 3. 앙상블 계산
-            total_frames = total_processed_count
-            detected_frames = len(frame_results)
-            
-            # 비율 계산
-            detection_ratio = detected_frames / total_frames if total_frames > 0 else 0.0
-            
+        with self._analyze_lock:
             if DEBUG:
-                logger.debug(f"[{request_id}] Detection Ratio: {detection_ratio:.2f} ({detected_frames}/{total_frames})")
+                logger.debug(f"[{request_id}] 분석 시작: {req.video_url}")
 
-            # 최소 비율 미달 시 실패 처리
-            if not frame_results or detection_ratio < MIN_FRAME_DETECT_RATIO:
-                logger.warning(f"[{request_id}] 강아지 탐지 실패 또는 비율 미달 (Ratio: {detection_ratio:.2f} < {MIN_FRAME_DETECT_RATIO})")
-                # 실패 응답 반환
-                include_processing = DEBUG or req.options.get("include_processing", False)
-                
+            start_time = time.time()
+            tmp_video_path = None
+
+            try:
+                # 1. Download Video
+                tmp_video_path = self._download_video(req.video_url, request_id)
+
+                # 2. Extract & Process Frames
+                # 최대 12프레임까지 처리 가능
+                frame_results, total_processed_count = self._process_video(tmp_video_path, request_id)
+
+                # 3. 앙상블 계산
+                total_frames = total_processed_count
+                detected_frames = len(frame_results)
+
+                # 비율 계산
+                detection_ratio = detected_frames / total_frames if total_frames > 0 else 0.0
+
+                if DEBUG:
+                    logger.debug(f"[{request_id}] Detection Ratio: {detection_ratio:.2f} ({detected_frames}/{total_frames})")
+
+                # 최소 비율 미달 시 실패 처리
+                if not frame_results or detection_ratio < MIN_FRAME_DETECT_RATIO:
+                    logger.warning(f"[{request_id}] 강아지 탐지 실패 또는 비율 미달 (Ratio: {detection_ratio:.2f} < {MIN_FRAME_DETECT_RATIO})")
+                    # 실패 응답 반환
+                    include_processing = DEBUG
+
+                    processing_stats = None
+                    if include_processing:
+                        processing_stats = {
+                            "analysis_time_ms": int((time.time() - start_time) * 1000),
+                            "frames_extracted": total_frames,
+                            "frames_face_detected": detected_frames,
+                            "frames_emotion_inferred": detected_frames,
+                            "fps_used": 2
+                        }
+                    return FaceAnalyzeResponse(
+                        analysis_id=req.analysis_id or request_id,
+                        video_url=req.video_url,
+                        error_code="FACE_NOT_DETECTED",
+                        processing=processing_stats
+                    )
+
+                predicted_emotion, confidence, final_probs = self._calculate_ensemble(frame_results)
+
+                # 4. 나레이션 생성
+                summary = self._generate_narration(predicted_emotion, confidence)
+
+                # 5. 응답 구성
+                include_processing = DEBUG
+
                 processing_stats = None
                 if include_processing:
                     processing_stats = {
                         "analysis_time_ms": int((time.time() - start_time) * 1000),
                         "frames_extracted": total_frames,
                         "frames_face_detected": detected_frames,
-                        "frames_emotion_inferred": detected_frames,
+                        "frames_emotion_inferred": len(frame_results),
                         "fps_used": 2
                     }
+
                 return FaceAnalyzeResponse(
-                     analysis_id=req.analysis_id or request_id,
-                     video_url=req.video_url,
-                     error_code="FACE_NOT_DETECTED",
-                     processing=processing_stats
+                    analysis_id=req.analysis_id or request_id,
+                    predicted_emotion=predicted_emotion,
+                    confidence=confidence,
+                    summary=summary,
+                    emotion_probabilities=final_probs,
+                    video_url=req.video_url,
+                    processing=processing_stats
                 )
 
-            predicted_emotion, confidence, final_probs = self._calculate_ensemble(frame_results)
-            
-            # 4. 나레이션 생성
-            summary = self._generate_narration(predicted_emotion, confidence)
-            
-            # 5. 응답 구성
-            include_processing = DEBUG or req.options.get("include_processing", False)
-            
-            processing_stats = None
-            if include_processing:
-                processing_stats = {
-                    "analysis_time_ms": int((time.time() - start_time) * 1000),
-                    "frames_extracted": total_frames,
-                    "frames_face_detected": detected_frames,
-                    "frames_emotion_inferred": len(frame_results),
-                    "fps_used": 2
-                }
-            
-            return FaceAnalyzeResponse(
-                analysis_id=req.analysis_id or request_id,
-                predicted_emotion=predicted_emotion,
-                confidence=confidence,
-                summary=summary,
-                emotion_probabilities=final_probs,
-                video_url=req.video_url,
-                processing=processing_stats
-            )
-
-        except ValueError as ve:
-                # 논리적 에러 (예: 영상 다운로드 실패 등)
-                logger.error(f"[{request_id}] 분석 유효성 에러: {ve}")
-                raise ve
-        except Exception as e:
-            logger.error(f"[{request_id}] 로컬 분석 실패: {e}", exc_info=True)
-            raise e
-        finally:
-            if tmp_video_path and os.path.exists(tmp_video_path):
-                os.remove(tmp_video_path)
+            except ValueError as ve:
+                    # 논리적 에러 (예: 영상 다운로드 실패 등)
+                    logger.error(f"[{request_id}] 분석 유효성 에러: {ve}")
+                    raise ve
+            except Exception as e:
+                logger.error(f"[{request_id}] 로컬 분석 실패: {e}", exc_info=True)
+                raise e
+            finally:
+                if tmp_video_path and os.path.exists(tmp_video_path):
+                    os.remove(tmp_video_path)
 
     def _download_video(self, url: str, request_id: str) -> str:
         fd, path = tempfile.mkstemp(suffix=".mp4")
@@ -533,4 +537,3 @@ class FaceAnalyzer:
             return "MID"
         else:
             return "LOW"
-

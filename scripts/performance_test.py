@@ -78,7 +78,7 @@ def build_payload(endpoint: str):
         raise ValueError(endpoint)
 
 
-def sync_worker(endpoints: list[str], count: int) -> dict[str, list[float]]:
+def sync_worker(endpoints: list[str], count: int, timeout_seconds: int) -> dict[str, list[float]]:
     # perform `count` requests for each endpoint sequentially
     overall_stats: dict[str, list[float]] = {ep: [] for ep in endpoints}
 
@@ -92,12 +92,17 @@ def sync_worker(endpoints: list[str], count: int) -> dict[str, list[float]]:
         payload = build_payload(ep)
         for i in range(count):
             start = time.time()
-            r = requests.post(url, json=payload, timeout=60)
-            elapsed = time.time() - start
-            overall_stats[ep].append(elapsed)
-            if r.status_code != 200:
-                # show full response for debugging
-                print(f"error ({ep}) {r.status_code} -> {r.text}")
+            try:
+                r = requests.post(url, json=payload, timeout=timeout_seconds)
+                elapsed = time.time() - start
+                overall_stats[ep].append(elapsed)
+                if r.status_code != 200:
+                    # show full response for debugging
+                    print(f"error ({ep}) {r.status_code} -> {r.text}")
+            except Exception as exc:
+                elapsed = time.time() - start
+                print(f"exception ({ep}) {type(exc).__name__} {exc}")
+                # don't append a timing for failures
 
     # print per-endpoint summaries
     for ep, times in overall_stats.items():
@@ -109,6 +114,9 @@ def sync_worker(endpoints: list[str], count: int) -> dict[str, list[float]]:
 
 def print_summary(times, mode: str):
     count = len(times)
+    if count == 0:
+        print(f"{mode} results: 0 requests (all failed)")
+        return
     total = sum(times)
     print(f"{mode} results: {count} requests")
     print(f"  total   : {total:.2f}s")
@@ -144,11 +152,12 @@ def save_results(overall_stats: dict[str, list[float]], mode: str, output_path: 
     print(f"\n✅ Results saved to: {output_path}")
 
 
-async def async_worker(endpoints: list[str], count: int) -> dict[str, list[float]]:
+async def async_worker(endpoints: list[str], count: int, timeout_seconds: int) -> dict[str, list[float]]:
     # send `count` concurrent requests to each endpoint
     overall_stats: dict[str, list[float]] = {ep: [] for ep in endpoints}
 
-    async with httpx.AsyncClient(timeout=60) as client:
+    timeout = httpx.Timeout(timeout_seconds)
+    async with httpx.AsyncClient(timeout=timeout) as client:
         async def make_task(ep: str):
             if ep == "missions":
                 url = f"{BASE}/api/missions/judge"
@@ -158,20 +167,38 @@ async def async_worker(endpoints: list[str], count: int) -> dict[str, list[float
                 url = f"{BASE}/api/{ep}/analyze"
             payload = build_payload(ep)
             start = time.time()
-            r = await client.post(url, json=payload)
-            elapsed = time.time() - start
-            if r.status_code != 200:
-                print(f"error ({ep})", r.status_code, r.text)
-            return ep, elapsed
+            try:
+                r = await client.post(url, json=payload)
+                elapsed = time.time() - start
+                if r.status_code != 200:
+                    print(f"error ({ep})", r.status_code, r.text)
+                return ep, elapsed
+            except Exception as exc:  # could be httpx.ReadTimeout etc.
+                elapsed = time.time() - start
+                print(f"exception ({ep}) {type(exc).__name__} {exc}")
+                # record None or sentinel so caller knows it failed
+                return ep, None
 
         tasks = []
         for ep in endpoints:
             for _ in range(count):
                 tasks.append(make_task(ep))
 
-        results = await asyncio.gather(*tasks)
-        for ep, elapsed in results:
-            overall_stats[ep].append(elapsed)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        # append only successful timings, record failures separately
+        failures: dict[str, int] = {ep: 0 for ep in endpoints}
+        for item in results:
+            if isinstance(item, Exception):
+                print(f"task-level exception {type(item).__name__}: {item}")
+                continue
+            ep, elapsed = item
+            if elapsed is None:
+                failures[ep] += 1
+            else:
+                overall_stats[ep].append(elapsed)
+        for ep, cnt in failures.items():
+            if cnt:
+                print(f"{cnt} failed/{ep} requests (see earlier errors)")
 
     # print per-endpoint summaries
     for ep, times in overall_stats.items():
@@ -193,14 +220,16 @@ def main():
                         help="send requests concurrently")
     parser.add_argument("--output", "-o", type=str, default=None,
                         help="save results to JSON file (e.g., results.json)")
+    parser.add_argument("--timeout-seconds", type=int, default=60,
+                        help="request timeout in seconds (default: 60)")
     args = parser.parse_args()
     
     mode = "async" if args.use_async else "sync"
     
     if args.use_async:
-        results = asyncio.run(async_worker(args.endpoints, args.count))
+        results = asyncio.run(async_worker(args.endpoints, args.count, args.timeout_seconds))
     else:
-        results = sync_worker(args.endpoints, args.count)
+        results = sync_worker(args.endpoints, args.count, args.timeout_seconds)
     
     # save results if output path is specified
     if args.output:
