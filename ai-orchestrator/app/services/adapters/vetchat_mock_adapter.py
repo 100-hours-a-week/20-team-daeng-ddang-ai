@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import datetime
-import uuid
 
 from app.core.config import DEBUG
 from app.schemas.vetchat_schema import VetChatRequest, VetChatResponse, VetCitation
@@ -57,3 +56,6 @@ class VetChatMockAdapter(VetChatAdapter):
             processing=processing,
             error_code=None,
         )
+
+    async def chat_async(self, request_id: str, req: VetChatRequest) -> VetChatResponse:
+        return self.chat(request_id, req)

@@ -9,3 +9,7 @@ class HealthcareAdapter(ABC):
     @abstractmethod
     def analyze(self, request_id: str, req: HealthcareAnalyzeRequest) -> HealthcareAnalyzeResponse:
         raise NotImplementedError
+
+    @abstractmethod
+    async def analyze_async(self, request_id: str, req: HealthcareAnalyzeRequest) -> HealthcareAnalyzeResponse:
+        raise NotImplementedError

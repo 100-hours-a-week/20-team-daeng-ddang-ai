@@ -6,8 +6,8 @@ from pydantic import BaseModel, Field, ConfigDict, HttpUrl
 
 
 class HealthcareAnalyzeRequest(BaseModel):
-    analysis_id: Optional[str] = Field(None, description="분석 요청 식별자 (UUID 등)")
-    dog_id: Optional[int] = Field(123, description="반려견 ID (없으면 기본값 123)")
+    analysis_id: str = Field(..., description="분석 요청 식별자 (UUID 등)")
+    dog_id: int = Field(..., description="반려견 ID")
     video_url: HttpUrl = Field(..., description="분석할 동영상 URL")
 
 

@@ -34,7 +34,7 @@ class MissionInput(BaseModel):
 class MissionAnalysisRequest(BaseModel):
     analysis_id: str     # 전체 분석 요청 ID
     walk_id: int         # 산책 ID
-    missions: List[MissionInput] = Field(..., min_length = 1) # 하나 이상의 미션 포함 필수
+    missions: List[MissionInput] = Field(..., min_length = 1, max_length = 5) # 1~5개 미션 제한
 
 # 개별 미션 분석 결과
 class MissionResult(BaseModel):

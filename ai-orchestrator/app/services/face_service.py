@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import uuid
-import asyncio
-from starlette.concurrency import run_in_threadpool
 from fastapi import HTTPException
 
 from app.core.config import FACE_MODE
@@ -49,16 +47,13 @@ def analyze_face_sync(req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
 
 
 async def analyze_face_async(req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
-    """비동기 호출. 어댑터가 async 메서드 있으면 사용, 없으면 스레드풀로 실행."""
+    """비동기 호출 표준 경로."""
     if not req.video_url:
         raise HTTPException(status_code=422, detail="video_url is required")
 
     request_id = str(uuid.uuid4())
     adapter = _select_adapter()
-    if hasattr(adapter, "analyze_async"):
-        response = await adapter.analyze_async(request_id, req)
-    else:
-        response = await run_in_threadpool(adapter.analyze, request_id, req)
+    response = await adapter.analyze_async(request_id, req)
 
     if not response.video_url:
         response.video_url = req.video_url

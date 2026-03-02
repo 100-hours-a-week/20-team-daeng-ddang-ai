@@ -1,7 +1,6 @@
 # app/services/adapters/face_mock_adpater.py
 from __future__ import annotations
 import random
-import datetime
 
 from app.schemas.face_schema import FaceAnalyzeRequest, FaceAnalyzeResponse
 from app.services.adapters.face_adapter import FaceAdapter
@@ -10,9 +9,7 @@ from app.services.adapters.face_adapter import FaceAdapter
 # 실제 모델 없이 가짜 데이터를 반환함
 class FaceMockAdapter(FaceAdapter):
     def analyze(self, request_id: str, req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
-        # 옵션에서 강제 감정 설정이 있으면 해당 감정 반환
-        forced = (req.options or {}).get("force_emotion")
-        label = forced or "relaxed"
+        label = "relaxed"
 
         probs = {
             "happy": 0.10,
@@ -20,11 +17,6 @@ class FaceMockAdapter(FaceAdapter):
             "relaxed": 0.80,
             "angry": 0.05,
         }
-        if forced and forced in probs:
-            for k in probs:
-                probs[k] = 0.05
-            probs[forced] = 0.85
-
         summary_options = {
             "angry": [
                 "강아지가 현재 불만이 있거나 화가 난 상태로 보입니다. (Mock)",
@@ -66,3 +58,6 @@ class FaceMockAdapter(FaceAdapter):
                 "note": "Mock Adapter"
             }
         )
+
+    async def analyze_async(self, request_id: str, req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
+        return self.analyze(request_id, req)

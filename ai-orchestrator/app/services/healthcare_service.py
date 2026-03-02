@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import uuid
-import asyncio
-from starlette.concurrency import run_in_threadpool
 from fastapi import HTTPException
 
 from app.core.config import HEALTHCARE_MODE
@@ -45,6 +43,4 @@ async def analyze_healthcare_async(req: HealthcareAnalyzeRequest) -> HealthcareA
 
     request_id = req.analysis_id or str(uuid.uuid4())
     adapter = _select_adapter()
-    if hasattr(adapter, "analyze_async"):
-        return await adapter.analyze_async(request_id, req)
-    return await run_in_threadpool(adapter.analyze, request_id, req)
+    return await adapter.analyze_async(request_id, req)

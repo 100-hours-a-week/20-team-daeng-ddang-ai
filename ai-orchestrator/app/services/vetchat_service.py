@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import uuid
-import asyncio
-from starlette.concurrency import run_in_threadpool
 from fastapi import HTTPException
 
 from app.core.config import CHATBOT_MODE
@@ -64,6 +62,4 @@ async def chat_async(req: VetChatRequest) -> VetChatResponse:
 
     request_id = str(uuid.uuid4())
     adapter = _select_adapter()
-    if hasattr(adapter, "chat_async"):
-        return await adapter.chat_async(request_id, req)
-    return await run_in_threadpool(adapter.chat, request_id, req)
+    return await adapter.chat_async(request_id, req)

@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.schemas.vetchat_schema import VetChatRequest, VetChatResponse
-from app.services.vetchat_service import chat_sync, chat_async
+from app.services.vetchat_service import chat_async
 
 router = APIRouter(prefix="/api/vet", tags=["vetchat"])
 

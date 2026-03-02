@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 import requests
-import datetime
 import httpx
-import asyncio
 
 from app.core.config import FACE_SERVICE_URL, FACE_HTTP_TIMEOUT_SECONDS
 from app.schemas.face_schema import FaceAnalyzeRequest, FaceAnalyzeResponse
@@ -16,9 +14,14 @@ class FaceHttpAdapter(FaceAdapter):
         self.base_url = FACE_SERVICE_URL
 
     def analyze(self, request_id: str, req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
-        # sync wrapper around async call for compatibility
-        # if called within an event loop this will still run in executor
-        return asyncio.get_event_loop().run_until_complete(self.analyze_async(request_id, req))
+        url = f"{self.base_url}/analyze"
+        payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+        payload["request_id"] = request_id
+
+        r = requests.post(url, json=payload, timeout=FACE_HTTP_TIMEOUT_SECONDS)
+        r.raise_for_status()
+        data = r.json()
+        return self._build_response(request_id, req, data)
 
     async def analyze_async(self, request_id: str, req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
         url = f"{self.base_url}/analyze"
@@ -30,7 +33,9 @@ class FaceHttpAdapter(FaceAdapter):
             r = await client.post(url, json=payload)
             r.raise_for_status()
             data = r.json()
+        return self._build_response(request_id, req, data)
 
+    def _build_response(self, request_id: str, req: FaceAnalyzeRequest, data: dict) -> FaceAnalyzeResponse:
         # 외부 API 응답 처리:
         # 1. 스키마가 완벽히 일치하면 바로 변환 (Happy Path)
         # 2. 불일치하면 필드 매핑 시도 (Fallback) - 외부 스키마 변경 대응
