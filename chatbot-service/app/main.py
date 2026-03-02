@@ -5,6 +5,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import DEBUG
 from app.schemas.chat_schema import ChatRequest, ChatResponse
@@ -41,7 +42,7 @@ app = FastAPI(
 
 # 챗봇 추론 엔드포인트
 @app.post("/api/vet/chat", response_model=ChatResponse)
-def chat(req: ChatRequest) -> ChatResponse:
+async def chat(req: ChatRequest) -> ChatResponse:
     """사용자 질문(text)과 선택 image_url을 받아 수의사 상담 답변 생성"""
     if not req.message or not req.message.content.strip():
         raise HTTPException(
@@ -55,7 +56,7 @@ def chat(req: ChatRequest) -> ChatResponse:
             },
         )
     try:
-        return generate_chat_response(req)
+        return await run_in_threadpool(generate_chat_response, req)
     except Exception as e:
         logger.exception(f"Chat failed for conversation_id={req.conversation_id}")
         raise HTTPException(status_code=500, detail=str(e))

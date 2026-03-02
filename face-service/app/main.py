@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from starlette.concurrency import run_in_threadpool
 from contextlib import asynccontextmanager
 import logging
 
@@ -37,14 +38,14 @@ app = FastAPI(title="Face Analysis Service", lifespan=lifespan)
 
 # 얼굴 분석 엔드포인트
 @app.post("/analyze", response_model=FaceAnalyzeResponse)
-def analyze_face(req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
+async def analyze_face(req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
     if not analyzer:
         raise HTTPException(status_code=503, detail="Face Analyzer not initialized")
     
-    # 요청 ID 생성 (없으면 자동 생성된 analysis_id 사용 불가 시 대체값)
-    req_id = req.analysis_id or "req_unknown" 
+    req_id = req.analysis_id or "req_unknown"
     try:
-        return analyzer.analyze(req_id, req)
+        # 분석 작업은 CPU/IO 집중적이므로 쓰레드 풀로 오프로드
+        return await run_in_threadpool(analyzer.analyze, req_id, req)
     except Exception as e:
         logger.exception(f"Analysis failed for {req_id}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import DEBUG_MODE
 from app.schemas.health_schema import HealthAnalyzeRequest, HealthAnalyzeResponse
@@ -34,11 +35,12 @@ app = FastAPI(title="Healthcare Analysis Service", lifespan=lifespan)
 
 
 @app.post("/analyze", response_model=HealthAnalyzeResponse)
-def analyze(req: HealthAnalyzeRequest) -> HealthAnalyzeResponse:
+async def analyze(req: HealthAnalyzeRequest) -> HealthAnalyzeResponse:
     if not analyzer_service:
         raise HTTPException(status_code=503, detail="Analyzer not initialized")
     try:
-        return analyzer_service.analyze(req)
+        # analysis may use heavy CPU, execute in thread pool
+        return await run_in_threadpool(analyzer_service.analyze, req)
     except HTTPException:
         raise
     except Exception as e:
