@@ -33,21 +33,47 @@ import httpx
 BASE = "http://localhost:8000"
 
 def build_payload(endpoint: str):
+    """Return a minimal valid request body for the given endpoint.
+
+    Uses real test videos from S3 and actual user messages.
+    """
     if endpoint == "missions":
+        # MissionInput requires int mission_id, enum mission_type, and walk_id
         return {
-            "analysis_id": "test",
-            "walk_id": "walk1",
+            "analysis_id": "bench-missions",
+            "walk_id": 1,
             "missions": [
-                {"mission_id": "m1", "mission_type": "sit", "video_url": "http://example.com/video.mp4"}
+                {
+                    "mission_id": 1,
+                    "mission_type": "PAW",
+                    "video_url": "https://daeng-map.s3.ap-northeast-2.amazonaws.com/test_set/PAW_03.mp4"
+                }
             ]
         }
     elif endpoint == "face":
-        return {"video_url": "http://example.com/video.mp4"}
+        # FaceAnalyzeRequest needs an analysis_id and optional video_url
+        return {
+            "analysis_id": "bench-face",
+            "video_url": "https://daeng-map.s3.ap-northeast-2.amazonaws.com/face_test/testVideo01.mp4"
+        }
     elif endpoint == "healthcare":
-        return {"video_url": "http://example.com/walk.mp4", "dog_id": "123"}
+        # HealthcareAnalyzeRequest with real test video
+        return {
+            "analysis_id": "bench-healthcare",
+            "dog_id": 123,
+            "video_url": "https://daeng-map.s3.ap-northeast-2.amazonaws.com/healthcare_test/testVideo02.mp4"
+        }
     elif endpoint == "chatbot":
-        # simple chat payload
-        return {"conversation_id": "conv1", "message": {"content": "Hello"}}
+        # ChatRequest with real user question
+        return {
+            "dog_id": 1,
+            "conversation_id": "bench-conv1",
+            "message": {
+                "role": "user",
+                "content": "최근 들어 우리 아이가 물을 평소보다 엄청 많이 마시고 오줌도 자주 싸요. 단순히 더워서 그런 걸까요, 아니면 당뇨 같은 병을 의심해 봐야 할까요?"
+            },
+            "history": []
+        }
     else:
         raise ValueError(endpoint)
 
@@ -70,7 +96,8 @@ def sync_worker(endpoints: list[str], count: int) -> dict[str, list[float]]:
             elapsed = time.time() - start
             overall_stats[ep].append(elapsed)
             if r.status_code != 200:
-                print(f"error ({ep})", r.status_code, r.text)
+                # show full response for debugging
+                print(f"error ({ep}) {r.status_code} -> {r.text}")
 
     # print per-endpoint summaries
     for ep, times in overall_stats.items():
