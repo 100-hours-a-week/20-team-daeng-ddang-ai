@@ -1,10 +1,11 @@
 # app/services/face_service.py
 from __future__ import annotations
 
+import asyncio
 import uuid
 from fastapi import HTTPException
 
-from app.core.config import FACE_MODE
+from app.core.config import FACE_MODE, FACE_MAX_CONCURRENCY, FACE_QUEUE_WAIT_SECONDS
 from app.schemas.face_schema import FaceAnalyzeRequest, FaceAnalyzeResponse
 from app.services.adapters.face_mock_adapter import FaceMockAdapter
 from app.services.adapters.face_http_adapter import FaceHttpAdapter
@@ -12,6 +13,7 @@ from app.services.adapters.face_http_adapter import FaceHttpAdapter
 from app.services.adapters.face_adapter import FaceAdapter
 
 _adapter_instance = None
+_face_sem = asyncio.Semaphore(max(1, FACE_MAX_CONCURRENCY))
 
 # 설정(FACE_MODE)에 따라 적절한 어댑터 인스턴스를 반환 (Singleton 패턴)
 # http: 외부 Face Service 서버로 요청 전송
@@ -51,10 +53,28 @@ async def analyze_face_async(req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
     if not req.video_url:
         raise HTTPException(status_code=422, detail="video_url is required")
 
+    acquired = False
+    try:
+        await asyncio.wait_for(_face_sem.acquire(), timeout=FACE_QUEUE_WAIT_SECONDS)
+        acquired = True
+    except TimeoutError:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": {
+                    "code": "FACE_OVERLOADED",
+                    "message": "Face analysis is overloaded. Please retry shortly.",
+                }
+            },
+        )
+
     request_id = str(uuid.uuid4())
     adapter = _select_adapter()
-    response = await adapter.analyze_async(request_id, req)
-
-    if not response.video_url:
-        response.video_url = req.video_url
-    return response
+    try:
+        response = await adapter.analyze_async(request_id, req)
+        if not response.video_url:
+            response.video_url = req.video_url
+        return response
+    finally:
+        if acquired:
+            _face_sem.release()

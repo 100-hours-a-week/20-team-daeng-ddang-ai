@@ -1,16 +1,18 @@
 # app/services/vetchat_service.py
 from __future__ import annotations
 
+import asyncio
 import uuid
 from fastapi import HTTPException
 
-from app.core.config import CHATBOT_MODE
+from app.core.config import CHATBOT_MODE, CHATBOT_MAX_CONCURRENCY, CHATBOT_QUEUE_WAIT_SECONDS
 from app.schemas.vetchat_schema import VetChatRequest, VetChatResponse
 from app.services.adapters.vetchat_adapter import VetChatAdapter
 from app.services.adapters.vetchat_http_adapter import VetChatHttpAdapter
 from app.services.adapters.vetchat_mock_adapter import VetChatMockAdapter
 
 _adapter_instance: VetChatAdapter | None = None
+_chatbot_sem = asyncio.Semaphore(max(1, CHATBOT_MAX_CONCURRENCY))
 
 
 def _select_adapter() -> VetChatAdapter:
@@ -60,6 +62,25 @@ async def chat_async(req: VetChatRequest) -> VetChatResponse:
             },
         )
 
+    acquired = False
+    try:
+        await asyncio.wait_for(_chatbot_sem.acquire(), timeout=CHATBOT_QUEUE_WAIT_SECONDS)
+        acquired = True
+    except TimeoutError:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": {
+                    "code": "CHATBOT_OVERLOADED",
+                    "message": "Chatbot is overloaded. Please retry shortly.",
+                }
+            },
+        )
+
     request_id = str(uuid.uuid4())
     adapter = _select_adapter()
-    return await adapter.chat_async(request_id, req)
+    try:
+        return await adapter.chat_async(request_id, req)
+    finally:
+        if acquired:
+            _chatbot_sem.release()
