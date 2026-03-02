@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import uuid
+import asyncio
+from starlette.concurrency import run_in_threadpool
 from fastapi import HTTPException
 
 from app.core.config import CHATBOT_MODE
@@ -45,3 +47,23 @@ def chat_sync(req: VetChatRequest) -> VetChatResponse:
     request_id = str(uuid.uuid4())
     adapter = _select_adapter()
     return adapter.chat(request_id, req)
+
+
+async def chat_async(req: VetChatRequest) -> VetChatResponse:
+    if not req.message or not req.message.content.strip():
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": {
+                    "code": "INVALID_INPUT",
+                    "message": "질문 내용이 비어 있습니다.",
+                    "details": {"field": "message.content"},
+                }
+            },
+        )
+
+    request_id = str(uuid.uuid4())
+    adapter = _select_adapter()
+    if hasattr(adapter, "chat_async"):
+        return await adapter.chat_async(request_id, req)
+    return await run_in_threadpool(adapter.chat, request_id, req)

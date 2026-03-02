@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import requests
 import json
+import httpx
+import asyncio
 from app.core.config import HEALTHCARE_SERVICE_URL, HEALTHCARE_HTTP_TIMEOUT_SECONDS
 from app.schemas.healthcare_schema import HealthcareAnalyzeRequest, HealthcareAnalyzeResponse
 from app.services.adapters.healthcare_adapter import HealthcareAdapter
@@ -13,13 +15,18 @@ class HealthcareHttpAdapter(HealthcareAdapter):
         self.base_url = HEALTHCARE_SERVICE_URL
 
     def analyze(self, request_id: str, req: HealthcareAnalyzeRequest) -> HealthcareAnalyzeResponse:
+        # sync wrapper using async method
+        return asyncio.get_event_loop().run_until_complete(self.analyze_async(request_id, req))
+
+    async def analyze_async(self, request_id: str, req: HealthcareAnalyzeRequest) -> HealthcareAnalyzeResponse:
         url = f"{self.base_url}/analyze"
         payload = req.model_dump(mode="json") if hasattr(req, "model_dump") else json.loads(req.json())
         payload["request_id"] = request_id
 
-        r = requests.post(url, json=payload, timeout=HEALTHCARE_HTTP_TIMEOUT_SECONDS)
-        r.raise_for_status()
-        data = r.json()
+        async with httpx.AsyncClient(timeout=HEALTHCARE_HTTP_TIMEOUT_SECONDS) as client:
+            r = await client.post(url, json=payload)
+            r.raise_for_status()
+            data = r.json()
 
         # Try direct parse first
         try:

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import uuid
+import asyncio
+from starlette.concurrency import run_in_threadpool
 from fastapi import HTTPException
 
 from app.core.config import HEALTHCARE_MODE
@@ -35,3 +37,14 @@ def analyze_healthcare_sync(req: HealthcareAnalyzeRequest) -> HealthcareAnalyzeR
     response = adapter.analyze(request_id, req)
 
     return response
+
+
+async def analyze_healthcare_async(req: HealthcareAnalyzeRequest) -> HealthcareAnalyzeResponse:
+    if not req.video_url:
+        raise HTTPException(status_code=422, detail="video_url is required")
+
+    request_id = req.analysis_id or str(uuid.uuid4())
+    adapter = _select_adapter()
+    if hasattr(adapter, "analyze_async"):
+        return await adapter.analyze_async(request_id, req)
+    return await run_in_threadpool(adapter.analyze, request_id, req)

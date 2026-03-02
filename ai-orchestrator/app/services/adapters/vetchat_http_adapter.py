@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import requests
+import httpx
+import asyncio
 
 from app.core.config import CHATBOT_SERVICE_URL, CHATBOT_HTTP_TIMEOUT_SECONDS, DEBUG
 from app.schemas.vetchat_schema import VetChatRequest, VetChatResponse, VetCitation
@@ -15,6 +17,9 @@ class VetChatHttpAdapter(VetChatAdapter):
         self.base_url = CHATBOT_SERVICE_URL
 
     def chat(self, request_id: str, req: VetChatRequest) -> VetChatResponse:
+        return asyncio.get_event_loop().run_until_complete(self.chat_async(request_id, req))
+
+    async def chat_async(self, request_id: str, req: VetChatRequest) -> VetChatResponse:
         url = f"{self.base_url}/api/vet/chat"
 
         # ai-orchestrator → chatbot-service 페이로드 변환
@@ -28,9 +33,10 @@ class VetChatHttpAdapter(VetChatAdapter):
         }
 
         try:
-            r = requests.post(url, json=payload, timeout=CHATBOT_HTTP_TIMEOUT_SECONDS)
-            r.raise_for_status()
-            data = r.json()
+            async with httpx.AsyncClient(timeout=CHATBOT_HTTP_TIMEOUT_SECONDS) as client:
+                r = await client.post(url, json=payload)
+                r.raise_for_status()
+                data = r.json()
 
             # chatbot-service 응답을 VetChatResponse로 직접 파싱 시도
             try:
