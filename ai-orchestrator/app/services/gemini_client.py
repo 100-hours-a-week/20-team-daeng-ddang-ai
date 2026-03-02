@@ -1,5 +1,6 @@
 # app/services/gemini_client.py
 import os
+import asyncio
 from typing import Optional
 from google import genai
 from google.genai import types
@@ -70,36 +71,29 @@ class GeminiClient:
         )
         return resp.text or ""
 
-    # --- 비동기 확장용 (Async Expansion) ---
-    # async def generate_from_video_url_async(
-    #     self,
-    #     video_url: str,
-    #     prompt_text: str,
-    #     *,
-    #     response_mime_type: str = "application/json",
-    #     response_schema: Optional[types.Schema] = None,
-    # ) -> str:
-    #     parts = [
-    #         types.Part.from_uri(
-    #             file_uri=video_url,
-    #             mime_type="video/mp4"
-    #         ),
-    #         types.Part.from_text(text=prompt_text),
-    #     ]
-    #
-    #     config_kwargs = {"response_mime_type": response_mime_type}
-    #     if response_schema is not None:
-    #         config_kwargs["response_schema"] = response_schema
-    #
-    #     # google.genai Client의 비동기 지원 여부에 따라 구현이 달라질 수 있습니다.
-    #     # 만약 aio 모듈이 있다면:
-    #     resp = await self.client.aio.models.generate_content(
-    #         model=self.model_name,
-    #         contents=[types.Content(parts=parts)],
-    #         config=types.GenerateContentConfig(**config_kwargs)
-    #     )
-    #     return resp.text or ""
-    # -------------------------------------
+    async def generate_from_video_url_async(
+        self,
+        video_url: str,
+        prompt_text: str,
+        *,
+        response_mime_type: str = "application/json",
+        response_schema: Optional[types.Schema] = None,
+    ) -> str:
+        """
+        Async version of generate_from_video_url.
+        Runs the sync client call in a threadpool to avoid blocking.
+        """
+        loop = asyncio.get_event_loop()
+        
+        def _sync_call():
+            return self.generate_from_video_url(
+                video_url=video_url,
+                prompt_text=prompt_text,
+                response_mime_type=response_mime_type,
+                response_schema=response_schema
+            )
+        
+        return await loop.run_in_executor(None, _sync_call)
 
     def generate_judgment_from_video_url(self, video_url: str, prompt_text: str) -> str:
         return self.generate_from_video_url(
