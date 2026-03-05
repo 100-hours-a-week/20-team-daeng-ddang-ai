@@ -26,6 +26,31 @@ AWS_SECRET_ACCESS_KEY=...
 AWS_REGION=ap-northeast-2
 S3_BUCKET_NAME=your-bucket
 S3_PREFIX=healthcare
+
+# (선택) AI -> 백엔드 작업 상태 콜백
+JOB_EVENT_CALLBACK_URL=https://backend.internal/api/healthcare/jobs/events
+JOB_EVENT_AUTH_TOKEN=internal_token
+JOB_EVENT_SOURCE=healthcare-service
+JOB_EVENT_TIMEOUT_SECONDS=3.0
+JOB_EVENT_MAX_RETRIES=3
+JOB_EVENT_RETRY_BACKOFF_SECONDS=0.5
+```
+
+상태 콜백은 `JOB_EVENT_CALLBACK_URL`가 설정된 경우에만 전송됩니다.
+콜백 payload 예시:
+```json
+{
+  "job_id": "analysis-id",
+  "status": "ANALYZING",
+  "message": "AI가 보행 영상을 분석 중입니다.",
+  "progress": 55,
+  "error_code": null,
+  "source": "healthcare-service",
+  "timestamp": "2026-03-05T01:23:45.678901+00:00",
+  "metadata": {
+    "dog_id": 123
+  }
+}
 ```
 
 ## 실행

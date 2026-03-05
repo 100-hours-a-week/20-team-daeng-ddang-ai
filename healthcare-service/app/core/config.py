@@ -28,3 +28,11 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 
 # Misc
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT_MS", "60000")) / 1000.0  # seconds
+
+# Job status callback (AI -> backend)
+JOB_EVENT_CALLBACK_URL = os.getenv("JOB_EVENT_CALLBACK_URL", "").strip()
+JOB_EVENT_AUTH_TOKEN = os.getenv("JOB_EVENT_AUTH_TOKEN", "").strip()
+JOB_EVENT_SOURCE = os.getenv("JOB_EVENT_SOURCE", "healthcare-service").strip()
+JOB_EVENT_TIMEOUT_SECONDS = float(os.getenv("JOB_EVENT_TIMEOUT_SECONDS", "3.0"))
+JOB_EVENT_MAX_RETRIES = int(os.getenv("JOB_EVENT_MAX_RETRIES", "3"))
+JOB_EVENT_RETRY_BACKOFF_SECONDS = float(os.getenv("JOB_EVENT_RETRY_BACKOFF_SECONDS", "0.5"))
