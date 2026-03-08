@@ -40,6 +40,15 @@ python run.py
 ```
 Health Check: `GET /health`
 
-## 5. 주요 기술 스택
+### 모델 리비전 체크 동작
+- 시작 시 모델 로드 후 현재 HF revision을 로컬 파일(`models/.face_*_revision`)에 기록합니다.
+- 백그라운드 체크는 `MODEL_UPDATE_CHECK_INTERVAL_SECONDS` 주기로 동작합니다.
+- `FORCE_REFRESH_MODELS=true`면 주기마다 강제 리로드됩니다. 운영에서는 일반적으로 `false` 권장입니다.
+
+## 5. Docker 운영 메모
+- 컨테이너는 non-root 사용자로 실행됩니다.
+- `HEALTHCHECK`가 `/health`를 주기적으로 확인합니다.
+
+## 6. 주요 기술 스택
 - **Web Framework**: FastAPI, Uvicorn
 - **ML/Vision**: PyTorch, Ultralytics (YOLO), Torchvision (EfficientNet), OpenCV, Pillow

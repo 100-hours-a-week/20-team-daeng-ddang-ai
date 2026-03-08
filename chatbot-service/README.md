@@ -26,7 +26,7 @@ chmod +x setup.sh && ./setup.sh
 
 ### 2. 모델 준비
 
-아래 Hugging Face 저장소에서 모델과 Vector DB를 다운로드해 `models/` 디렉토리에 배치:
+아래 Hugging Face 저장소에서 모델과 Vector DB를 다운로드해 `models/` 디렉토리에 배치하거나, 서버 시작 시 자동 다운로드를 사용합니다.
 - **HF Repo**: `huggingface.co/20-team-daeng-ddang-ai/vet-chat`
   - LoRA Adapter → `models/Qwen2.5-7B/7B-LoRA/`
   - Vector DB → `models/chroma_db/`
@@ -62,8 +62,18 @@ python run.py
 | `FORCE_REFRESH_MODELS` | `false` | `true`면 체크 주기마다 자산 재다운로드 강제 |
 | `MODEL_REVISION_FILE` | `models/.vet_chat_revision` | 마지막 적용 HF 리비전 sha 저장 파일 |
 | `MODEL_UPDATE_CHECK_INTERVAL_SECONDS` | `86400` | 백그라운드 모델 업데이트 체크 주기(초, `<=0`이면 비활성화) |
+| `HUGGING_FACE_HUB_TOKEN` | 없음 | HF 자산 다운로드/리비전 조회 토큰 |
 
 `EMBEDDING_MODEL_ID` 또는 `EMBEDDING_NORMALIZE`를 변경하면 기존 `models/chroma_db` 인덱스와 벡터 공간이 달라질 수 있습니다. 이 경우 인덱스를 동일 설정으로 재구축하는 것을 권장합니다.
+
+## 모델 업데이트 동작
+- 시작 시 자산 존재 여부와 HF revision을 확인해 필요한 경우만 다운로드합니다.
+- `FORCE_REFRESH_MODELS=true`면 주기마다 강제 갱신합니다.
+- 첫 실행 시 `sentence-transformers`, reranker 모델이 별도 캐시에 다운로드될 수 있습니다.
+
+## Docker 운영 메모
+- 컨테이너는 non-root 사용자로 실행됩니다.
+- `HEALTHCHECK`가 `/health`를 주기적으로 확인합니다.
 
 ## 폴더 구조
 

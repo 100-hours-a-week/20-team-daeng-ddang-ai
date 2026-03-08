@@ -1,105 +1,52 @@
 # AI Orchestrator (FastAPI)
 
-이 서비스는 팀 **댕땅 프로젝트**의 AI Orchestrator 서버입니다.  
-백엔드로부터 미션 분석 요청을 받아 외부 AI 모델(Gemini)을 활용해 미션 성공 여부를 판단하고 결과를 반환하는 역할을 합니다.
+`ai-orchestrator`는 Backend와 AI 마이크로서비스 사이의 통합 진입점입니다.
 
-본 레포는 **AI 판단 로직 및 API 연동 검증을 위한 초기 구현 단계**이며, 모델 교체 및 고도화를 고려한 구조로 설계되었습니다.
+## 엔드포인트
+- `POST /api/missions/judge`: 돌발미션 판정 (Gemini)
+- `POST /api/face/analyze`: 표정 분석 위임
+- `POST /api/healthcare/analyze`: 보행 분석 위임
+- `POST /api/vet/chat`: 수의사 챗봇 위임
+- `GET /health`: 헬스 체크
 
----
+## 핵심 운영 설정
+`.env.example` 참고
 
-## 기능 (Features)
+- 모드/URL
+  - `FACE_MODE`, `FACE_SERVICE_URL`
+  - `HEALTHCARE_MODE`, `HEALTHCARE_SERVICE_URL`
+  - `CHATBOT_MODE`, `CHATBOT_SERVICE_URL`
+- 타임아웃
+  - `FACE_HTTP_TIMEOUT_SECONDS`
+  - `HEALTHCARE_HTTP_TIMEOUT_SECONDS`
+  - `CHATBOT_HTTP_TIMEOUT_SECONDS`
+- 백프레셔(과부하 제어)
+  - `*_MAX_CONCURRENCY`: 기능별 동시 처리 슬롯 수
+  - `*_QUEUE_WAIT_SECONDS`: 슬롯 대기 시간(초), 초과 시 429 반환
 
-### 1. 돌발 미션 분석 (Mission Analysis)
-Gemini 1.5 Flash 모델을 활용하여 반려동물 산책 미션(예: "기다려 하기")의 성공 여부를 판단합니다.
-- **Endpoint**: `POST /api/missions/judge`
-- **Input**: 동영상 URL, 미션 텍스트
-- **Output**: 성공 여부(true/false), 판단 이유
-
-### 2. 표정 분석 (Facial Analysis)
-반려견의 표정을 분석하여 감정 상태를 추론하고 나레이션을 생성합니다.
-- **Endpoint**: `POST /api/face/analyze`
-- **Logic**: YOLOv10 (Face Detection) -> EfficientNet (Emotion Classification) -> Weighted Ensemble
-- **Input**: 동영상 URL
-- **Output**: 감정(happy, sad, etc.), 신뢰도, 나레이션 요약
-
----
-
-## 설정 (Configuration)
-
-`.env` 파일을 생성하고 다음 환경 변수를 설정해야 합니다. (참고: `.env.example`)
-
-### 필수 변수
-- `GEMINI_API_KEY`: Google Gemini API Key
-- `HF_TOKEN`: HuggingFace Token (표정 분석 모델 다운로드용)
-
-### 모드 설정 (Face Analysis)
-표정 분석 기능을 **내부에서 실행(Monolithic)** 할지, **별도 서버로 분리(Microservice)** 할지 선택할 수 있습니다.
-
-| 모드 (`FACE_MODE`) | 설명 | 설정 예시 |
-| --- | --- | --- |
-| **`local`** (기본) | 메인 서버 내부에서 직접 표정 분석 수행 | `FACE_MODE=local` |
-| **`http`** | 별도의 Face Server로 요청을 보냄 | `FACE_MODE=http`<br>`FACE_SERVICE_URL=http://localhost:8100` |
-| **`mock`** | 분석 없이 더미 데이터 반환 (개발용) | `FACE_MODE=mock` |
-
----
-
-## 실행 (Run)
-
-### 1. 가상 환경 및 의존성 설치
+## 실행
 ```bash
-python3 -m venv venv
-source venv/bin/activate
+cd ai-orchestrator
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-# 개발용 툴 설치 (Linter 등)
-pip install ruff
+python run.py
 ```
 
-### 2. 메인 서버 실행 (AI Orchestrator)
-기본적으로 8000번 포트에서 실행됩니다.
+## 벤치마크
+레포 루트에서:
 ```bash
-uvicorn app.main:app --reload
+python3 scripts/performance_test.py -e face healthcare chatbot --count 10 --timeout-seconds 240 -o scripts/bench_results/sync_baseline.json
+python3 scripts/performance_test.py -e face healthcare chatbot --count 10 --async --concurrency 4 --timeout-seconds 240 -o scripts/bench_results/async_c4_fair.json
+python3 scripts/performance_test.py -e face healthcare chatbot --count 10 --async --concurrency 8 --mix-endpoints --timeout-seconds 240 -o scripts/bench_results/async_c8_mixed.json
 ```
 
-### 3. Face Server 실행 (Optional)
-`FACE_MODE=http`일 경우, 표정 분석 전용 서버를 별도로 띄워야 합니다. (기본 8100 포트)
+## 점검 스크립트
+레포 루트에서:
 ```bash
-python run_face_server.py
-```
+# 최근 async 리팩터링 코드 반영 여부 점검
+python3 scripts/verify_async_refactor_smoke.py --skip-smoke
 
----
-
-## 테스트 (Testing)
-
-### 1. 돌발 미션 테스트 (Mission E2E)
-#### 배치 테스트 (기본 제공 영상)
-내부 테스트 데이터(`test_cases`)를 사용하여 일괄 테스트합니다.
-```bash
-python scripts/test_judge_e2e.py
-```
-
-#### 로컬 스크립트 테스트 (개별)
-원하는 비디오와 미션 타입을 지정하여 테스트합니다.
-```bash
-python scripts/test_mission_local.py <MISSION_TYPE> <VIDEO_URL>
-# 예시: python scripts/test_mission_local.py SIT https://example.com/sit.mp4
-```
-
-### 2. 표정 분석 테스트 (Face Analysis)
-#### 로컬 스크립트 테스트 (서버 실행 X)
-서버를 띄우지 않고 로직(모델 추론 포함)만 바로 테스트하고 싶을 때 사용합니다.
-```bash
-python scripts/test_face_local.py <VIDEO_URL>
-```
-
-#### API 테스트 (cURL)
-서버 실행 후 직접 요청을 보내 테스트합니다.
-
-**Request:**
-```bash
-curl -X POST "http://localhost:8000/api/face/analyze" \
-     -H "Content-Type: application/json" \
-     -d '{
-           "analysis_id": "test_01",
-           "video_url": "https://your-video-url.mp4"
-         }'
+# 오케스트레이터 스모크 테스트
+python3 scripts/verify_async_refactor_smoke.py --base-url http://localhost:8000 --timeout-seconds 240 --allow-429
 ```

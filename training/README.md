@@ -3,20 +3,21 @@
 This directory contains the **source code** for training and validating your AI models.
 Do **NOT** upload heavy model weights (`.pt`) or full datasets here.
 
-## 📂 Structure
+## 📂 Structure (Current)
 
 ```text
 training/
-├── emotion-classification/
-│   ├── train.py
-│   ├── dataset.py
+├── face-emotion-analysis/
+│   ├── dog-detection.py
+│   ├── emotion-classification.py
+│   └── model-test.py
+├── healthcare/
+│   ├── analyze_health.py
 │   └── requirements.txt
-├── dog-pose-estimation/
-│   └── train_yolo.py
-├── llm/
-│   └── finetune.py
-└── urgent-mission/
-    └── experiment.py
+├── chatbot/
+│   ├── chatbot_core.py
+│   └── requirements.txt
+└── requirements.txt
 ```
 
 ## ⚠️ Important

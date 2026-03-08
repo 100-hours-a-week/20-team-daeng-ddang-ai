@@ -3,7 +3,7 @@
 This directory tracks the performance (metrics) and configurations of your AI models.
 The actual model weights (e.g., `.pt`, `.onnx`) should be uploaded to **HuggingFace Hub**.
 
-## � Project Overview & File Guidelines
+## Project Overview & File Guidelines
 
 ### 1. 😠 Emotion Analysis (표정 분석)
 
@@ -29,6 +29,9 @@ This project has two parts: detecting the dog's face and classifying its emotion
 | Component | Model | HuggingFace Hub Uploads | GitHub Metrics Uploads |
 | :--- | :--- | :--- | :--- |
 | **LLM** | **Llama 3 / Qwen 2.5 (8B)** | `adapter_model.bin`<br>`tokenizer.json`<br>`config.json` | `training_args.json`<br>`eval_results.json` (Perplexity, ROUGE)<br>`sample_generations.txt` |
+
+Note:
+- 현재 서비스 기준 챗봇 모델 계열은 `Qwen2.5-*`를 기준으로 관리하는 것을 권장합니다.
 
 ---
 
