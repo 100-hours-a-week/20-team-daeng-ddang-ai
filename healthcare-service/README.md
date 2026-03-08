@@ -4,6 +4,8 @@
 
 ## 기능
 - `POST /analyze`: 영상 URL을 받아 보행 분석 수행
+- `POST /jobs`: (옵션) job 기반 비동기 분석 요청 생성
+- `GET /jobs/{job_id}`: (옵션) 비동기 job 상태/결과 조회
 - `GET /health`: 헬스 체크
 - 분석 결과에 오버레이 영상 URL(S3) 포함, `DEBUG_MODE=true` 시 처리 메타데이터/디버그 정보 포함
 
@@ -31,6 +33,10 @@ AWS_REGION=ap-northeast-2
 S3_BUCKET_NAME=your-bucket
 S3_PREFIX=healthcare
 
+# Async job queue 모드
+ASYNC_JOB_MODE_ENABLED=false
+ASYNC_JOB_QUEUE_MAX_SIZE=100
+
 # (선택) AI -> 백엔드 작업 상태 콜백
 JOB_EVENT_CALLBACK_URL=https://backend.internal/api/healthcare/jobs/events
 JOB_EVENT_AUTH_TOKEN=internal_token
@@ -41,6 +47,9 @@ JOB_EVENT_RETRY_BACKOFF_SECONDS=0.5
 ```
 
 상태 콜백은 `JOB_EVENT_CALLBACK_URL`가 설정된 경우에만 전송됩니다.
+`ASYNC_JOB_MODE_ENABLED=true`일 때는 `/analyze` 대신 `/jobs` 흐름을 사용합니다.
+`ASYNC_JOB_MODE_ENABLED=false`일 때는 기존 동기 `/analyze`만 사용합니다.
+
 콜백 payload 예시:
 ```json
 {
@@ -72,6 +81,7 @@ python run.py  # 기본 포트 8200
 - `FORCE_REFRESH_MODELS=true`면 주기마다 강제 리로드됩니다. 운영에서는 일반적으로 `false` 권장입니다.
 
 ## 엔드포인트 예시
+동기 모드(`ASYNC_JOB_MODE_ENABLED=false`):
 ```bash
 curl -X POST "http://localhost:8200/analyze" \
   -H "Content-Type: application/json" \
@@ -80,6 +90,21 @@ curl -X POST "http://localhost:8200/analyze" \
     "video_url": "https://example.com/dog.mp4",
     "dog_id": 123
   }'
+```
+
+비동기 job 모드(`ASYNC_JOB_MODE_ENABLED=true`):
+```bash
+curl -X POST "http://localhost:8200/jobs" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "analysis_id": "health-job-001",
+    "video_url": "https://example.com/dog.mp4",
+    "dog_id": 123
+  }'
+```
+
+```bash
+curl "http://localhost:8200/jobs/health-job-001"
 ```
 
 ## Docker 운영 메모

@@ -4,7 +4,7 @@ import logging
 import os
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import boto3
 from botocore.config import Config as BotoConfig
@@ -61,31 +61,69 @@ class HealthAnalyzerService:
         else:
             logger.warning("S3_BUCKET_NAME not set. Overlay videos will not be uploaded.")
 
-    def analyze(self, req: HealthAnalyzeRequest) -> HealthAnalyzeResponse:
+    def _emit_status(
+        self,
+        analysis_id: str,
+        status: JobStatus,
+        message: str,
+        *,
+        progress: int | None = None,
+        error_code: str | None = None,
+        metadata: dict | None = None,
+        status_hook: Callable[..., None] | None = None,
+    ) -> None:
+        publish_job_event(
+            analysis_id,
+            status,
+            message,
+            progress=progress,
+            error_code=error_code,
+            metadata=metadata,
+        )
+        if status_hook:
+            status_hook(
+                status=status,
+                message=message,
+                progress=progress,
+                error_code=error_code,
+                metadata=metadata,
+            )
+
+    def analyze(
+        self,
+        req: HealthAnalyzeRequest,
+        *,
+        emit_queued_event: bool = True,
+        status_hook: Callable[..., None] | None = None,
+    ) -> HealthAnalyzeResponse:
         analysis_id = req.analysis_id or str(uuid.uuid4())
         dog_id = int(req.dog_id) if req.dog_id is not None else 123
 
         logger.info("Healthcare analyze start id=%s dog_id=%s debug=%s", analysis_id, dog_id, DEBUG_MODE)
-        publish_job_event(
-            analysis_id,
-            JobStatus.QUEUED,
-            "분석 요청을 접수했습니다.",
-            progress=5,
-            metadata={"dog_id": dog_id},
-        )
+        if emit_queued_event:
+            self._emit_status(
+                analysis_id,
+                JobStatus.QUEUED,
+                "분석 요청을 접수했습니다.",
+                progress=5,
+                metadata={"dog_id": dog_id},
+                status_hook=status_hook,
+            )
 
         try:
-            publish_job_event(
+            self._emit_status(
                 analysis_id,
                 JobStatus.PREPARING_INPUT,
                 "분석을 위한 입력 영상을 준비 중입니다.",
                 progress=15,
+                status_hook=status_hook,
             )
-            publish_job_event(
+            self._emit_status(
                 analysis_id,
                 JobStatus.ANALYZING,
                 "AI가 보행 영상을 분석 중입니다.",
                 progress=55,
+                status_hook=status_hook,
             )
             report = self.analyzer.analyze_video(
                 video_source=str(req.video_url),
@@ -93,20 +131,22 @@ class HealthAnalyzerService:
                 analysis_id=analysis_id,
             )
         except Exception as exc:
-            publish_job_event(
+            self._emit_status(
                 analysis_id,
                 JobStatus.FAILED,
                 "AI 분석 중 오류가 발생했습니다.",
                 error_code="ANALYSIS_FAILED",
                 metadata={"detail": str(exc)},
+                status_hook=status_hook,
             )
             raise
 
-        publish_job_event(
+        self._emit_status(
             analysis_id,
             JobStatus.REPORT_GENERATING,
             "분석 결과를 정리하고 있습니다.",
             progress=85,
+            status_hook=status_hook,
         )
 
         # Upload overlay artifact to S3 if available
@@ -120,11 +160,12 @@ class HealthAnalyzerService:
                 report["artifacts"] = artifacts
 
         response = HealthAnalyzeResponse.model_validate(report)
-        publish_job_event(
+        self._emit_status(
             analysis_id,
             JobStatus.DONE,
             "분석이 완료되었습니다.",
             progress=100,
+            status_hook=status_hook,
         )
         return response
 

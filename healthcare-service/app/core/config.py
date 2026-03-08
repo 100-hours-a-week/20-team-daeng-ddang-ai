@@ -33,6 +33,10 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 # Misc
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT_MS", "60000")) / 1000.0  # seconds
 
+# Async job queue mode
+ASYNC_JOB_MODE_ENABLED = os.getenv("ASYNC_JOB_MODE_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
+ASYNC_JOB_QUEUE_MAX_SIZE = int(os.getenv("ASYNC_JOB_QUEUE_MAX_SIZE", "100"))
+
 # Job status callback (AI -> backend)
 JOB_EVENT_CALLBACK_URL = os.getenv("JOB_EVENT_CALLBACK_URL", "").strip()
 JOB_EVENT_AUTH_TOKEN = os.getenv("JOB_EVENT_AUTH_TOKEN", "").strip()

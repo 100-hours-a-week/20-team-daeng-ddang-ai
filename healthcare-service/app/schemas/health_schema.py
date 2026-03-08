@@ -32,3 +32,24 @@ class HealthAnalyzeResponse(BaseModel):
     artifacts: Optional[ArtifactsPayload] = None
     # processing: Optional[Dict[str, Any]] = None
     error_code: Optional[str] = None
+
+
+class HealthJobCreateResponse(BaseModel):
+    job_id: str
+    status: str
+    timestamp: str
+    progress: Optional[int] = None
+    error_code: Optional[str] = None
+    source: str
+    message: Optional[str] = None
+
+
+class HealthJobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    timestamp: str
+    progress: Optional[int] = None
+    error_code: Optional[str] = None
+    source: str
+    message: Optional[str] = None
+    result: Optional[HealthAnalyzeResponse] = None
