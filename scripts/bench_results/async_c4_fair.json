@@ -1,0 +1,47 @@
+{
+  "timestamp": "2026-03-02T10:58:10.330974",
+  "mode": "async",
+  "concurrency": 4,
+  "mix_endpoints": false,
+  "endpoints": {
+    "face": {
+      "count": 10,
+      "requested": 10,
+      "failures": 0,
+      "success_rate": 1.0,
+      "total_seconds": 28.87,
+      "average_seconds": 2.89,
+      "min_seconds": 0.96,
+      "p50_seconds": 3.33,
+      "p95_seconds": 3.43,
+      "p99_seconds": 3.43,
+      "max_seconds": 3.43
+    },
+    "healthcare": {
+      "count": 10,
+      "requested": 10,
+      "failures": 0,
+      "success_rate": 1.0,
+      "total_seconds": 87.99,
+      "average_seconds": 8.8,
+      "min_seconds": 3.97,
+      "p50_seconds": 8.73,
+      "p95_seconds": 11.85,
+      "p99_seconds": 11.85,
+      "max_seconds": 11.85
+    },
+    "chatbot": {
+      "count": 10,
+      "requested": 10,
+      "failures": 0,
+      "success_rate": 1.0,
+      "total_seconds": 393.71,
+      "average_seconds": 39.37,
+      "min_seconds": 21.77,
+      "p50_seconds": 41.02,
+      "p95_seconds": 50.55,
+      "p99_seconds": 50.55,
+      "max_seconds": 50.55
+    }
+  }
+}
