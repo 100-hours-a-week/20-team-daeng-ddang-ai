@@ -1,0 +1,27 @@
+{
+  "timestamp": "2026-03-02T10:38:57.732782",
+  "mode": "async",
+  "endpoints": {
+    "face": {
+      "count": 10,
+      "total_seconds": 55.71,
+      "average_seconds": 5.57,
+      "min_seconds": 1.63,
+      "max_seconds": 9.46
+    },
+    "healthcare": {
+      "count": 10,
+      "total_seconds": 278.92,
+      "average_seconds": 27.89,
+      "min_seconds": 27.21,
+      "max_seconds": 28.13
+    },
+    "chatbot": {
+      "count": 10,
+      "total_seconds": 1195.67,
+      "average_seconds": 119.57,
+      "min_seconds": 109.24,
+      "max_seconds": 120.77
+    }
+  }
+}

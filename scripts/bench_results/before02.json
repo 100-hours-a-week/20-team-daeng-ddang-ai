@@ -1,0 +1,34 @@
+{
+  "timestamp": "2026-03-02T08:08:22.102932",
+  "mode": "sync",
+  "endpoints": {
+    "missions": {
+      "count": 10,
+      "total_seconds": 185.36,
+      "average_seconds": 18.54,
+      "min_seconds": 14.36,
+      "max_seconds": 32.1
+    },
+    "face": {
+      "count": 10,
+      "total_seconds": 7.73,
+      "average_seconds": 0.77,
+      "min_seconds": 0.71,
+      "max_seconds": 0.97
+    },
+    "healthcare": {
+      "count": 10,
+      "total_seconds": 47.44,
+      "average_seconds": 4.74,
+      "min_seconds": 4.63,
+      "max_seconds": 4.97
+    },
+    "chatbot": {
+      "count": 10,
+      "total_seconds": 78.29,
+      "average_seconds": 7.83,
+      "min_seconds": 6.25,
+      "max_seconds": 9.31
+    }
+  }
+}

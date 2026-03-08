@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-03-02T10:36:27.837050",
+  "mode": "async",
+  "endpoints": {
+    "face": {
+      "count": 10,
+      "total_seconds": 57.02,
+      "average_seconds": 5.7,
+      "min_seconds": 2.27,
+      "max_seconds": 9.15
+    }
+  }
+}
