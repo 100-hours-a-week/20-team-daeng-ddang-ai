@@ -28,6 +28,11 @@ pip install -r requirements.txt
 | `HF_TOKEN` | **필수** | Hugging Face 모델 다운로드용 토큰 | `hf_...` |
 | `FACE_DETECTION_MODEL_ID` | 선택 | YOLO 감지 모델 ID | `20-team-daeng-ddang-ai/dog-detection` |
 | `FACE_EMOTION_MODEL_ID` | 선택 | 표정 분석 모델 ID | `20-team-daeng-ddang-ai/dog-emotion-classification` |
+| `CHECK_MODEL_UPDATE_ON_START` | 선택 | HF 리비전 자동 비교 활성화 | `true` |
+| `MODEL_UPDATE_CHECK_INTERVAL_SECONDS` | 선택 | 백그라운드 체크 주기(초) | `86400` |
+| `FORCE_REFRESH_MODELS` | 선택 | `true`면 주기마다 강제 리로드 | `false` |
+| `FACE_DETECTION_REVISION_FILE` | 선택 | 감지 모델 리비전 저장 파일 | `models/.face_detection_revision` |
+| `FACE_EMOTION_REVISION_FILE` | 선택 | 감정 모델 리비전 저장 파일 | `models/.face_emotion_revision` |
 
 ## 4. 실행 (Running)
 ```bash

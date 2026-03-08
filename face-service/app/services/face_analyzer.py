@@ -80,9 +80,15 @@ logger = logging.getLogger(__name__)
 # 3. EfficientNet-B0 기반 4종 감정 분류 (Happy, Sad, Angry, Relaxed)
 # 4. 앙상블 (Confidence Weighted) 및 나레이션 생성
 class FaceAnalyzer:
-    def __init__(self):
+    def __init__(
+        self,
+        detection_revision: Optional[str] = None,
+        emotion_revision: Optional[str] = None,
+    ):
         # Ultralytics YOLO 내부 상태 변경(fuse/setup) 구간의 동시 접근을 방지
         self._analyze_lock = threading.Lock()
+        self.detection_revision = detection_revision
+        self.emotion_revision = emotion_revision
         self._ensure_dependencies()
         self._authenticate_hf()
         
@@ -98,14 +104,22 @@ class FaceAnalyzer:
             download_successful = False
             try:
                 # 'best.pt' 우선 시도
-                model_path = hf_hub_download(repo_id=FACE_DETECTION_MODEL_ID, filename="best.pt")
+                model_path = hf_hub_download(
+                    repo_id=FACE_DETECTION_MODEL_ID,
+                    filename="best.pt",
+                    revision=self.detection_revision,
+                )
                 download_successful = True
                 logger.info(f"Downloaded YOLO model 'best.pt' to: {model_path}")
             except Exception:
                 logger.warning(f"Failed to download 'best.pt' from HF repo {FACE_DETECTION_MODEL_ID}. Trying 'dog-75e-11n.pt'...")
                 try:
                     # Fallback (이전 모델명)
-                    model_path = hf_hub_download(repo_id=FACE_DETECTION_MODEL_ID, filename="dog-75e-11n.pt")
+                    model_path = hf_hub_download(
+                        repo_id=FACE_DETECTION_MODEL_ID,
+                        filename="dog-75e-11n.pt",
+                        revision=self.detection_revision,
+                    )
                     download_successful = True
                     logger.info(f"Downloaded YOLO model 'dog-75e-11n.pt' to: {model_path}")
                 except Exception as e:
@@ -144,9 +158,21 @@ class FaceAnalyzer:
         try:
             # 설정 파일 및 가중치 다운로드
             # 설정 파일 및 가중치 다운로드
-            labels_path = hf_hub_download(repo_id=FACE_EMOTION_MODEL_ID, filename="class.json")
-            preprocess_path = hf_hub_download(repo_id=FACE_EMOTION_MODEL_ID, filename="preprocess.json")
-            weight_path = hf_hub_download(repo_id=FACE_EMOTION_MODEL_ID, filename="best.pt")
+            labels_path = hf_hub_download(
+                repo_id=FACE_EMOTION_MODEL_ID,
+                filename="class.json",
+                revision=self.emotion_revision,
+            )
+            preprocess_path = hf_hub_download(
+                repo_id=FACE_EMOTION_MODEL_ID,
+                filename="preprocess.json",
+                revision=self.emotion_revision,
+            )
+            weight_path = hf_hub_download(
+                repo_id=FACE_EMOTION_MODEL_ID,
+                filename="best.pt",
+                revision=self.emotion_revision,
+            )
 
             # 라벨 로드 (class.json은 {"0": "angry", ...} 형태)
             with open(labels_path, "r") as f:

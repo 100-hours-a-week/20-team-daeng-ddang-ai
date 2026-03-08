@@ -39,8 +39,9 @@ logger = logging.getLogger(__name__)
 
 
 class HealthAnalyzerService:
-    def __init__(self) -> None:
+    def __init__(self, model_revision: Optional[str] = None) -> None:
         self.output_dir = OUTPUT_DIR
+        self.model_revision = model_revision
         Path(self.output_dir).mkdir(parents=True, exist_ok=True)
 
         model_path = self._resolve_model_path()
@@ -174,6 +175,7 @@ class HealthAnalyzerService:
                 downloaded = hf_hub_download(
                     repo_id=HEALTH_MODEL_ID,
                     filename=HEALTH_MODEL_FILENAME,
+                    revision=self.model_revision,
                     token=HF_TOKEN,
                     cache_dir=str(model_dir),
                 )

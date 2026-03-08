@@ -16,6 +16,10 @@ DEBUG_MODE=false
 HEALTH_MODEL_ID=20-team-daeng-ddang-ai/dog-pose-estimation
 HEALTH_MODEL_FILENAME=best.pt
 MODEL_CACHE_DIR=models
+CHECK_MODEL_UPDATE_ON_START=true
+FORCE_REFRESH_MODELS=false
+MODEL_UPDATE_CHECK_INTERVAL_SECONDS=86400
+HEALTH_MODEL_REVISION_FILE=models/.health_model_revision
 
 # Hugging Face (private 모델일 경우 필요)
 HF_TOKEN=your_hf_token
