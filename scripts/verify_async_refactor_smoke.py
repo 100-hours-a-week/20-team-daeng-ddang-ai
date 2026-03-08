@@ -17,8 +17,7 @@ import json
 import sys
 from pathlib import Path
 from typing import Any
-
-import requests
+from urllib import request, error
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -103,7 +102,18 @@ def run_smoke_tests(base_url: str, timeout: int, allow_429: bool) -> list[str]:
     for ep, url in targets:
         payload = build_payload(ep)
         try:
-            resp = requests.post(url, json=payload, timeout=timeout)
+            req = request.Request(
+                url=url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with request.urlopen(req, timeout=timeout) as r:
+                status_code = r.getcode()
+                body_text = r.read().decode("utf-8", errors="replace")
+        except error.HTTPError as exc:
+            status_code = exc.code
+            body_text = exc.read().decode("utf-8", errors="replace")
         except Exception as exc:
             errors.append(f"{ep}: request failed ({type(exc).__name__}: {exc})")
             continue
@@ -111,15 +121,15 @@ def run_smoke_tests(base_url: str, timeout: int, allow_429: bool) -> list[str]:
         ok_codes = {200}
         if allow_429:
             ok_codes.add(429)
-        if resp.status_code not in ok_codes:
-            snippet = resp.text[:400]
-            errors.append(f"{ep}: unexpected status={resp.status_code}, body={snippet}")
+        if status_code not in ok_codes:
+            snippet = body_text[:400]
+            errors.append(f"{ep}: unexpected status={status_code}, body={snippet}")
             continue
 
         detail = ""
-        if resp.status_code == 200:
+        if status_code == 200:
             try:
-                data = resp.json()
+                data = json.loads(body_text)
                 if ep == "chatbot" and "answer" not in data and "error_code" not in data:
                     errors.append("chatbot: 200 response missing both answer and error_code")
                     continue
@@ -130,7 +140,7 @@ def run_smoke_tests(base_url: str, timeout: int, allow_429: bool) -> list[str]:
         else:
             detail = "overloaded(429)"
 
-        print(f"- {ep}: {resp.status_code} ({detail})")
+        print(f"- {ep}: {status_code} ({detail})")
 
     return errors
 
@@ -199,4 +209,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
