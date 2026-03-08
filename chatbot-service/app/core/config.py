@@ -1,5 +1,9 @@
 # app/core/config.py
 import os
+from dotenv import load_dotenv
+
+# Load .env for local/service runtime.
+load_dotenv()
 
 # 디버그 모드
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
