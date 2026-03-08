@@ -139,6 +139,22 @@ def _reload_if_model_updated() -> bool:
         reload_lock.release()
 
 
+def _persist_current_revisions_after_startup() -> None:
+    """Persist known remote revisions to avoid an immediate first-cycle reload."""
+    if not CHECK_MODEL_UPDATE_ON_START:
+        return
+
+    if _repo_like(FACE_DETECTION_MODEL_ID):
+        remote = _fetch_remote_revision(FACE_DETECTION_MODEL_ID)
+        if remote:
+            _write_revision(FACE_DETECTION_REVISION_FILE, remote)
+
+    if _repo_like(FACE_EMOTION_MODEL_ID):
+        remote = _fetch_remote_revision(FACE_EMOTION_MODEL_ID)
+        if remote:
+            _write_revision(FACE_EMOTION_REVISION_FILE, remote)
+
+
 async def _background_model_update_checker(stop_event: asyncio.Event):
     interval = MODEL_UPDATE_CHECK_INTERVAL_SECONDS
     logger.info("Face model update checker started (interval=%ss)", interval)
@@ -164,6 +180,7 @@ async def lifespan(app: FastAPI):
     try:
         # 모델 로드 및 초기화 (시간이 걸릴 수 있음)
         analyzer = _create_analyzer()
+        _persist_current_revisions_after_startup()
         logger.info("FaceAnalyzer initialized successfully.")
     except Exception as e:
         logger.error(f"Failed to initialize FaceAnalyzer: {e}")

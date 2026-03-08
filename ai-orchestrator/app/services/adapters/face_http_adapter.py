@@ -12,6 +12,8 @@ from app.services.adapters.face_adapter import FaceAdapter
 class FaceHttpAdapter(FaceAdapter):
     def __init__(self) -> None:
         self.base_url = FACE_SERVICE_URL
+        # Reuse one async client to keep connection pooling/keep-alive benefits.
+        self._async_client = httpx.AsyncClient(timeout=FACE_HTTP_TIMEOUT_SECONDS)
 
     def analyze(self, request_id: str, req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
         url = f"{self.base_url}/analyze"
@@ -29,10 +31,9 @@ class FaceHttpAdapter(FaceAdapter):
         payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
         payload["request_id"] = request_id
 
-        async with httpx.AsyncClient(timeout=FACE_HTTP_TIMEOUT_SECONDS) as client:
-            r = await client.post(url, json=payload)
-            r.raise_for_status()
-            data = r.json()
+        r = await self._async_client.post(url, json=payload)
+        r.raise_for_status()
+        data = r.json()
         return self._build_response(request_id, req, data)
 
     def _build_response(self, request_id: str, req: FaceAnalyzeRequest, data: dict) -> FaceAnalyzeResponse:

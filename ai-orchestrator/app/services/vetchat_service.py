@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+import requests
+import httpx
 from fastapi import HTTPException
 
 from app.core.config import CHATBOT_MODE, CHATBOT_MAX_CONCURRENCY, CHATBOT_QUEUE_WAIT_SECONDS
@@ -81,6 +83,15 @@ async def chat_async(req: VetChatRequest) -> VetChatResponse:
     adapter = _select_adapter()
     try:
         return await adapter.chat_async(request_id, req)
+    except httpx.HTTPStatusError as e:
+        detail = e.response.text if e.response is not None else str(e)
+        raise HTTPException(status_code=e.response.status_code if e.response else 502, detail=detail)
+    except requests.HTTPError as e:
+        resp = getattr(e, "response", None)
+        detail = resp.text if resp is not None else str(e)
+        raise HTTPException(status_code=resp.status_code if resp is not None else 502, detail=detail)
+    except (httpx.RequestError, requests.RequestException) as e:
+        raise HTTPException(status_code=502, detail=f"Chatbot upstream request failed: {e}")
     finally:
         if acquired:
             _chatbot_sem.release()

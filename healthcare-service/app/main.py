@@ -109,6 +109,17 @@ def _reload_if_model_updated() -> bool:
         reload_lock.release()
 
 
+def _persist_current_revision_after_startup() -> None:
+    """Persist known remote revision to avoid an immediate first-cycle reload."""
+    if not CHECK_MODEL_UPDATE_ON_START:
+        return
+
+    if _repo_like(HEALTH_MODEL_ID):
+        remote = _fetch_remote_revision(HEALTH_MODEL_ID)
+        if remote:
+            _write_revision(HEALTH_MODEL_REVISION_FILE, remote)
+
+
 async def _background_model_update_checker(stop_event: asyncio.Event):
     interval = MODEL_UPDATE_CHECK_INTERVAL_SECONDS
     logger.info("Healthcare model update checker started (interval=%ss)", interval)
@@ -133,6 +144,7 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing HealthAnalyzerService...")
     try:
         analyzer_service = HealthAnalyzerService()
+        _persist_current_revision_after_startup()
         logger.info("HealthAnalyzerService initialized.")
     except Exception as e:
         logger.error("Failed to initialize analyzer: %s", e)

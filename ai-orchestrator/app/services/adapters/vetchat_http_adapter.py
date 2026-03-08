@@ -14,6 +14,8 @@ class VetChatHttpAdapter(VetChatAdapter):
 
     def __init__(self) -> None:
         self.base_url = CHATBOT_SERVICE_URL
+        # Reuse one async client to keep connection pooling/keep-alive benefits.
+        self._async_client = httpx.AsyncClient(timeout=CHATBOT_HTTP_TIMEOUT_SECONDS)
 
     def chat(self, request_id: str, req: VetChatRequest) -> VetChatResponse:
         url = f"{self.base_url}/api/vet/chat"
@@ -26,22 +28,10 @@ class VetChatHttpAdapter(VetChatAdapter):
             "user_context": req.user_context.model_dump() if req.user_context else None,
         }
 
-        try:
-            r = requests.post(url, json=payload, timeout=CHATBOT_HTTP_TIMEOUT_SECONDS)
-            r.raise_for_status()
-            data = r.json()
-            return self._build_response(req, data)
-        except Exception as e:
-            err_msg = str(e)
-            if hasattr(e, "response") and e.response is not None:
-                try:
-                    err_msg += f" | Details: {e.response.text}"
-                except Exception:
-                    pass
-            return VetChatResponse(
-                dog_id=req.dog_id,
-                error_code=f"HTTP_ADAPTER_ERROR: {err_msg}",
-            )
+        r = requests.post(url, json=payload, timeout=CHATBOT_HTTP_TIMEOUT_SECONDS)
+        r.raise_for_status()
+        data = r.json()
+        return self._build_response(req, data)
 
     async def chat_async(self, request_id: str, req: VetChatRequest) -> VetChatResponse:
         url = f"{self.base_url}/api/vet/chat"
@@ -56,25 +46,10 @@ class VetChatHttpAdapter(VetChatAdapter):
             "user_context": req.user_context.model_dump() if req.user_context else None,
         }
 
-        try:
-            async with httpx.AsyncClient(timeout=CHATBOT_HTTP_TIMEOUT_SECONDS) as client:
-                r = await client.post(url, json=payload)
-                r.raise_for_status()
-                data = r.json()
-            return self._build_response(req, data)
-        except Exception as e:
-            # 에러 발생 시 상세 정보 포함 (특히 422 Unprocessable Entity 대응)
-            err_msg = str(e)
-            if hasattr(e, 'response') and e.response is not None:
-                try:
-                    err_msg += f" | Details: {e.response.text}"
-                except:
-                    pass
-            
-            return VetChatResponse(
-                dog_id=req.dog_id,
-                error_code=f"HTTP_ADAPTER_ERROR: {err_msg}"
-            )
+        r = await self._async_client.post(url, json=payload)
+        r.raise_for_status()
+        data = r.json()
+        return self._build_response(req, data)
 
     def _build_response(self, req: VetChatRequest, data: dict) -> VetChatResponse:
         # chatbot-service 응답을 VetChatResponse로 직접 파싱 시도

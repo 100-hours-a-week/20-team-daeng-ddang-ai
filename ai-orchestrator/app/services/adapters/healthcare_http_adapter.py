@@ -12,6 +12,8 @@ from app.services.adapters.healthcare_adapter import HealthcareAdapter
 class HealthcareHttpAdapter(HealthcareAdapter):
     def __init__(self) -> None:
         self.base_url = HEALTHCARE_SERVICE_URL
+        # Reuse one async client to keep connection pooling/keep-alive benefits.
+        self._async_client = httpx.AsyncClient(timeout=HEALTHCARE_HTTP_TIMEOUT_SECONDS)
 
     def analyze(self, request_id: str, req: HealthcareAnalyzeRequest) -> HealthcareAnalyzeResponse:
         url = f"{self.base_url}/analyze"
@@ -28,10 +30,9 @@ class HealthcareHttpAdapter(HealthcareAdapter):
         payload = req.model_dump(mode="json") if hasattr(req, "model_dump") else json.loads(req.json())
         payload["request_id"] = request_id
 
-        async with httpx.AsyncClient(timeout=HEALTHCARE_HTTP_TIMEOUT_SECONDS) as client:
-            r = await client.post(url, json=payload)
-            r.raise_for_status()
-            data = r.json()
+        r = await self._async_client.post(url, json=payload)
+        r.raise_for_status()
+        data = r.json()
         return self._build_response(request_id, req, data)
 
     def _build_response(
