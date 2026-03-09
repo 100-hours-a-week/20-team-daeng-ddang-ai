@@ -25,6 +25,16 @@ services:
       - --dtype
       - ${VLLM_DTYPE:-auto}
     ipc: host
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${VLLM_PORT:-8400}/health', timeout=3)\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     deploy:
       resources:
         reservations:

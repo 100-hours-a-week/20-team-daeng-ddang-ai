@@ -1,0 +1,14 @@
+[Unit]
+Description=vLLM OpenAI-Compatible Inference Server
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ktb_fp/vllm-service
+EnvironmentFile=/opt/ktb_fp/vllm-service/.env
+ExecStart=/opt/ktb_fp/vllm-service/.venv/bin/python /opt/ktb_fp/vllm-service/run.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
