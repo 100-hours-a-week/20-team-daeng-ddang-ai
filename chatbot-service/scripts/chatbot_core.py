@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Optional, List, Tuple
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -60,6 +61,36 @@ class VetChatbotCore:
         self._initialize()
 
     @staticmethod
+    def _prepare_query_text(message: str, embedding_model_id: str) -> str:
+        message = (message or "").strip()
+        if not message:
+            return ""
+        if "e5" in embedding_model_id.lower() and not message.lower().startswith("query:"):
+            return f"query: {message}"
+        return message
+
+    @staticmethod
+    def _clean_context_text(text: str) -> str:
+        if not text:
+            return ""
+
+        cleaned_lines: List[str] = []
+        for raw_line in text.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            ascii_letters = sum(ch.isascii() and ch.isalpha() for ch in line)
+            uppercase_ascii = sum(ch.isascii() and ch.isupper() for ch in line)
+            if ascii_letters >= 8 and uppercase_ascii / max(ascii_letters, 1) >= 0.8:
+                continue
+
+            line = re.sub(r"\s+", " ", line)
+            cleaned_lines.append(line)
+
+        return "\n".join(cleaned_lines)
+
+    @staticmethod
     def _env_bool(name: str, default: bool) -> bool:
         return os.getenv(name, str(default).lower()).strip().lower() in {"1", "true", "yes", "y", "on"}
 
@@ -118,7 +149,8 @@ class VetChatbotCore:
         needs_download = self.force_refresh_models
         target_revision = None
         reasons = []
-        allow_patterns = ["chroma_db_e5_base/*"]
+        chroma_dir_name = os.path.basename(os.path.normpath(self.chroma_db_dir)) or "chroma_db"
+        allow_patterns = [f"{chroma_dir_name}/*"]
 
         if self.force_refresh_models:
             reasons.append("FORCE_REFRESH_MODELS=true")
@@ -253,18 +285,20 @@ class VetChatbotCore:
             dict: { "answer": str, "citations": list of dicts }
         """
         # 1. RAG 기반 문서 검색
-        docs = self.retriever.invoke(message)
+        retrieval_query = self._prepare_query_text(message, self.embedding_model_id)
+        docs = self.retriever.invoke(retrieval_query)
         ranked_docs = self._rerank_docs(message, docs)
         
         context_text = ""
         citations = []
         for idx, (doc, score) in enumerate(ranked_docs):
-            context_text += f"[근거 자료 {idx+1}]\n{doc.page_content}\n\n"
+            cleaned_content = self._clean_context_text(doc.page_content)
+            context_text += f"[근거 자료 {idx+1}]\n{cleaned_content}\n\n"
             citations.append({
                 "doc_id": doc.metadata.get("id", f"doc_{idx}"),
                 "title": doc.metadata.get("title", "수집된 수의학 지식"),
                 "score": round(float(score), 4),
-                "snippet": doc.page_content[:100] + "..."
+                "snippet": cleaned_content[:100] + "..."
             })
 
         # 2. 강아지 프로필 컨텍스트 문자열 생성
@@ -281,7 +315,8 @@ class VetChatbotCore:
             "당신은 따뜻하고 전문적인 수의학 AI 챗봇입니다.\n"
             "아래 제공된 [환자 정보]와 [참고 문서]만을 바탕으로 사용자의 질문에 답변하세요.\n"
             "의학적 판단이 필요하거나 생명이 위급한 상황이라면, 반드시 '근처 동물병원에 내원하시라'는 권고를 포함하세요.\n"
-            "답변은 핵심을 짚어 간결하고 친절한 한국어로 작성하며, 참고 문서에 없는 내용을 절대 지어내지 마세요."
+            "답변은 핵심을 짚어 간결하고 친절한 한국어로 작성하며, 참고 문서에 없는 내용을 절대 지어내지 마세요.\n"
+            "참고 문서의 제목, 섹션 헤더, 영어 문구를 답변 첫머리에 그대로 복사하지 마세요."
         )
 
         user_prompt = f"[환자 정보]\n{profile_str}\n[참고 문서]\n{context_text}\n[사용자 질문]\n{message}"
