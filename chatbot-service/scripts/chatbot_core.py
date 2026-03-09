@@ -232,7 +232,7 @@ class VetChatbotCore:
 
         pairs = [(message, doc.page_content) for doc in docs]
         try:
-            scores = self.reranker.predict(pairs)
+            scores = self.reranker.predict(pairs, show_progress_bar=False)
             doc_scores = list(zip(docs, [float(s) for s in scores]))
             doc_scores.sort(key=lambda x: x[1], reverse=True)
             return doc_scores[: self.final_top_k]
