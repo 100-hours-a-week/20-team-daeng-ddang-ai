@@ -33,13 +33,22 @@ pip install -r requirements.txt
 python run.py
 ```
 
+## 챗봇 연동 메모
+
+- `CHATBOT_MODE=http`일 때 `chatbot-service`에 HTTP 요청을 위임합니다.
+- `CHATBOT_SERVICE_URL`은 `chatbot-service` 주소를 가리켜야 합니다.
+- `vLLM`을 쓰는 경우에도 `ai-orchestrator`는 직접 `vllm-service`를 호출하지 않습니다.
+- 요청 흐름은 `ai-orchestrator -> chatbot-service -> vllm-service` 입니다.
+
 ## 벤치마크
 레포 루트에서:
 ```bash
-python3 scripts/performance_test.py -e face healthcare chatbot --count 10 --timeout-seconds 240 -o scripts/bench_results/sync_baseline.json
-python3 scripts/performance_test.py -e face healthcare chatbot --count 10 --async --concurrency 4 --timeout-seconds 240 -o scripts/bench_results/async_c4_fair.json
-python3 scripts/performance_test.py -e face healthcare chatbot --count 10 --async --concurrency 8 --mix-endpoints --timeout-seconds 240 -o scripts/bench_results/async_c8_mixed.json
+python3 scripts/performance_test.py -e face healthcare chatbot --count 10 --timeout-seconds 240 --label sync_baseline
+python3 scripts/performance_test.py -e face healthcare chatbot --count 10 --async --concurrency 4 --timeout-seconds 240 --label async_c4_fair
+python3 scripts/performance_test.py -e face healthcare chatbot --count 10 --async --concurrency 8 --mix-endpoints --timeout-seconds 240 --label async_c8_mixed
 ```
+
+`--output`을 생략하면 결과는 자동으로 `scripts/bench_results/`에 저장됩니다.
 
 ## 점검 스크립트
 레포 루트에서:
