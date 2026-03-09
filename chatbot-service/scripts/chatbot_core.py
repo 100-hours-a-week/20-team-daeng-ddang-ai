@@ -118,7 +118,7 @@ class VetChatbotCore:
         needs_download = self.force_refresh_models
         target_revision = None
         reasons = []
-        allow_patterns = ["chroma_db/*"]
+        allow_patterns = ["chroma_db_e5_base/*"]
 
         if self.force_refresh_models:
             reasons.append("FORCE_REFRESH_MODELS=true")

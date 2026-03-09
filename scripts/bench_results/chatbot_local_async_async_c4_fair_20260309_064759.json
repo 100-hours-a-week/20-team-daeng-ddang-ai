@@ -1,0 +1,21 @@
+{
+  "timestamp": "2026-03-09T06:47:59.000381",
+  "mode": "async",
+  "concurrency": 4,
+  "mix_endpoints": false,
+  "endpoints": {
+    "chatbot": {
+      "count": 20,
+      "requested": 20,
+      "failures": 0,
+      "success_rate": 1.0,
+      "total_seconds": 414.82,
+      "average_seconds": 20.74,
+      "min_seconds": 8.04,
+      "p50_seconds": 17.58,
+      "p95_seconds": 36.04,
+      "p99_seconds": 37.11,
+      "max_seconds": 37.11
+    }
+  }
+}

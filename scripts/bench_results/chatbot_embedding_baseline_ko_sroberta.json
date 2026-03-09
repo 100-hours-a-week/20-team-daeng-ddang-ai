@@ -1,0 +1,296 @@
+{
+  "summary": {
+    "run_started_at": "2026-03-09T07:38:05.684021",
+    "run_finished_at": "2026-03-09T07:38:53.391037",
+    "tag": "baseline_ko_sroberta",
+    "base_url": "http://localhost:8300",
+    "endpoint": "http://localhost:8300/api/vet/chat",
+    "cases_file": "built-in",
+    "repeat": 3,
+    "warmup": 1,
+    "timeout_seconds": 120,
+    "total_requests": 24,
+    "success_count": 24,
+    "failure_count": 0,
+    "success_rate": 1.0,
+    "latency_ms": {
+      "avg": 1987.72,
+      "p50": 2028.02,
+      "p95": 2560.69,
+      "p99": 2577.75,
+      "max": 2577.75
+    },
+    "response_quality": {
+      "avg_answer_chars": 479.88,
+      "avg_citation_count": 3,
+      "answer_keyword_hit_rate": 1.0,
+      "citation_keyword_hit_rate": 0.125
+    }
+  },
+  "per_request": [
+    {
+      "case_id": "c01",
+      "ok": true,
+      "latency_ms": 1236.4700362086296,
+      "status_code": 200,
+      "answer_chars": 297,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c02",
+      "ok": true,
+      "latency_ms": 2560.687817633152,
+      "status_code": 200,
+      "answer_chars": 598,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c03",
+      "ok": true,
+      "latency_ms": 2364.347955211997,
+      "status_code": 200,
+      "answer_chars": 613,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 1,
+      "error": null
+    },
+    {
+      "case_id": "c04",
+      "ok": true,
+      "latency_ms": 1470.6718437373638,
+      "status_code": 200,
+      "answer_chars": 317,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c05",
+      "ok": true,
+      "latency_ms": 1459.7373027354479,
+      "status_code": 200,
+      "answer_chars": 348,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c06",
+      "ok": true,
+      "latency_ms": 2137.350117787719,
+      "status_code": 200,
+      "answer_chars": 512,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c07",
+      "ok": true,
+      "latency_ms": 2577.748818323016,
+      "status_code": 200,
+      "answer_chars": 616,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c08",
+      "ok": true,
+      "latency_ms": 1618.779979646206,
+      "status_code": 200,
+      "answer_chars": 415,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c01",
+      "ok": true,
+      "latency_ms": 1247.2875751554966,
+      "status_code": 200,
+      "answer_chars": 297,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c02",
+      "ok": true,
+      "latency_ms": 2541.0640612244606,
+      "status_code": 200,
+      "answer_chars": 579,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c03",
+      "ok": true,
+      "latency_ms": 2212.8908652812243,
+      "status_code": 200,
+      "answer_chars": 571,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 1,
+      "error": null
+    },
+    {
+      "case_id": "c04",
+      "ok": true,
+      "latency_ms": 1658.8167864829302,
+      "status_code": 200,
+      "answer_chars": 362,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c05",
+      "ok": true,
+      "latency_ms": 1693.0826343595982,
+      "status_code": 200,
+      "answer_chars": 416,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c06",
+      "ok": true,
+      "latency_ms": 2028.0215498059988,
+      "status_code": 200,
+      "answer_chars": 469,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c07",
+      "ok": true,
+      "latency_ms": 2544.6053110063076,
+      "status_code": 200,
+      "answer_chars": 603,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c08",
+      "ok": true,
+      "latency_ms": 2047.6649850606918,
+      "status_code": 200,
+      "answer_chars": 509,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c01",
+      "ok": true,
+      "latency_ms": 1127.4241134524345,
+      "status_code": 200,
+      "answer_chars": 256,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c02",
+      "ok": true,
+      "latency_ms": 1779.6628177165985,
+      "status_code": 200,
+      "answer_chars": 433,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c03",
+      "ok": true,
+      "latency_ms": 2524.3485290557146,
+      "status_code": 200,
+      "answer_chars": 630,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 1,
+      "error": null
+    },
+    {
+      "case_id": "c04",
+      "ok": true,
+      "latency_ms": 1723.4887443482876,
+      "status_code": 200,
+      "answer_chars": 398,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c05",
+      "ok": true,
+      "latency_ms": 1871.8811143189669,
+      "status_code": 200,
+      "answer_chars": 470,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c06",
+      "ok": true,
+      "latency_ms": 2216.315820813179,
+      "status_code": 200,
+      "answer_chars": 541,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c07",
+      "ok": true,
+      "latency_ms": 2545.3675147145987,
+      "status_code": 200,
+      "answer_chars": 647,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    },
+    {
+      "case_id": "c08",
+      "ok": true,
+      "latency_ms": 2517.6214668899775,
+      "status_code": 200,
+      "answer_chars": 620,
+      "citation_count": 3,
+      "answer_keyword_hit": 1,
+      "citation_keyword_hit": 0,
+      "error": null
+    }
+  ]
+}
