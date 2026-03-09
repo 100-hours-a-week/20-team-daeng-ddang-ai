@@ -7,6 +7,10 @@ ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 WORKDIR /app
 
+# Create non-root user
+RUN addgroup --system app \
+    && adduser --system --ingroup app --home /app app
+
 # LLM 구동 시 시스템에서 종종 필요한 기본 C/C++ 런타임 설치 지원
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -18,6 +22,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
+RUN mkdir -p /app/models \
+    && chown -R app:app /app
 
 # models/ 디렉토리는 별도 볼륨 마운트 또는 HuggingFace Hub에서 다운로드
 # (lora-qwen-7b-final, chroma_db 포함)
@@ -25,6 +31,12 @@ VOLUME ["/app/models"]
 
 # Expose port (default 8300)
 EXPOSE 8300
+
+USER app
+
+# Container-level health check
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8300/health', timeout=3)"
 
 # Command to run the application
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8300"]

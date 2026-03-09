@@ -13,6 +13,7 @@ torchvision==0.20.1
 
 # Transformer/HuggingFace Eco
 transformers<4.49.0
+huggingface_hub>=0.23.0
 peft
 accelerate
 

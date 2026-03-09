@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import requests
 import json
+import httpx
 from app.core.config import HEALTHCARE_SERVICE_URL, HEALTHCARE_HTTP_TIMEOUT_SECONDS
 from app.schemas.healthcare_schema import HealthcareAnalyzeRequest, HealthcareAnalyzeResponse
 from app.services.adapters.healthcare_adapter import HealthcareAdapter
@@ -11,6 +12,8 @@ from app.services.adapters.healthcare_adapter import HealthcareAdapter
 class HealthcareHttpAdapter(HealthcareAdapter):
     def __init__(self) -> None:
         self.base_url = HEALTHCARE_SERVICE_URL
+        # Reuse one async client to keep connection pooling/keep-alive benefits.
+        self._async_client = httpx.AsyncClient(timeout=HEALTHCARE_HTTP_TIMEOUT_SECONDS)
 
     def analyze(self, request_id: str, req: HealthcareAnalyzeRequest) -> HealthcareAnalyzeResponse:
         url = f"{self.base_url}/analyze"
@@ -20,7 +23,21 @@ class HealthcareHttpAdapter(HealthcareAdapter):
         r = requests.post(url, json=payload, timeout=HEALTHCARE_HTTP_TIMEOUT_SECONDS)
         r.raise_for_status()
         data = r.json()
+        return self._build_response(request_id, req, data)
 
+    async def analyze_async(self, request_id: str, req: HealthcareAnalyzeRequest) -> HealthcareAnalyzeResponse:
+        url = f"{self.base_url}/analyze"
+        payload = req.model_dump(mode="json") if hasattr(req, "model_dump") else json.loads(req.json())
+        payload["request_id"] = request_id
+
+        r = await self._async_client.post(url, json=payload)
+        r.raise_for_status()
+        data = r.json()
+        return self._build_response(request_id, req, data)
+
+    def _build_response(
+        self, request_id: str, req: HealthcareAnalyzeRequest, data: dict
+    ) -> HealthcareAnalyzeResponse:
         # Try direct parse first
         try:
             return HealthcareAnalyzeResponse(**data)

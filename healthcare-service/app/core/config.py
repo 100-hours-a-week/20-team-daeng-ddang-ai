@@ -12,6 +12,10 @@ PORT = int(os.getenv("PORT", "8200"))
 HEALTH_MODEL_ID = os.getenv("HEALTH_MODEL_ID", "20-team-daeng-ddang-ai/dog-pose-estimation")
 HEALTH_MODEL_FILENAME = os.getenv("HEALTH_MODEL_FILENAME", "best.pt")
 MODEL_CACHE_DIR = os.getenv("MODEL_CACHE_DIR", "models")
+CHECK_MODEL_UPDATE_ON_START = os.getenv("CHECK_MODEL_UPDATE_ON_START", "true").lower() in {"1", "true", "yes", "on"}
+FORCE_REFRESH_MODELS = os.getenv("FORCE_REFRESH_MODELS", "false").lower() in {"1", "true", "yes", "on"}
+MODEL_UPDATE_CHECK_INTERVAL_SECONDS = int(os.getenv("MODEL_UPDATE_CHECK_INTERVAL_SECONDS", "86400"))
+HEALTH_MODEL_REVISION_FILE = os.getenv("HEALTH_MODEL_REVISION_FILE", "models/.health_model_revision")
 
 # Output artifacts
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", "output")
@@ -28,3 +32,15 @@ HF_TOKEN = os.getenv("HF_TOKEN")
 
 # Misc
 REQUEST_TIMEOUT = int(os.getenv("REQUEST_TIMEOUT_MS", "60000")) / 1000.0  # seconds
+
+# Async job queue mode
+ASYNC_JOB_MODE_ENABLED = os.getenv("ASYNC_JOB_MODE_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
+ASYNC_JOB_QUEUE_MAX_SIZE = int(os.getenv("ASYNC_JOB_QUEUE_MAX_SIZE", "100"))
+
+# Job status callback (AI -> backend)
+JOB_EVENT_CALLBACK_URL = os.getenv("JOB_EVENT_CALLBACK_URL", "").strip()
+JOB_EVENT_AUTH_TOKEN = os.getenv("JOB_EVENT_AUTH_TOKEN", "").strip()
+JOB_EVENT_SOURCE = os.getenv("JOB_EVENT_SOURCE", "healthcare-service").strip()
+JOB_EVENT_TIMEOUT_SECONDS = float(os.getenv("JOB_EVENT_TIMEOUT_SECONDS", "3.0"))
+JOB_EVENT_MAX_RETRIES = int(os.getenv("JOB_EVENT_MAX_RETRIES", "3"))
+JOB_EVENT_RETRY_BACKOFF_SECONDS = float(os.getenv("JOB_EVENT_RETRY_BACKOFF_SECONDS", "0.5"))

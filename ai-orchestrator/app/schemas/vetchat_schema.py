@@ -13,9 +13,9 @@ class VetChatMessage(BaseModel):
 
 # 반려견 기본 정보
 class VetUserContext(BaseModel):
-    dog_age_years: Optional[float] = Field(None, description="반려견 나이(년)")
-    dog_weight_kg: Optional[float] = Field(None, description="반려견 체중(kg)")
-    breed:         Optional[str]   = Field(None, description="견종")
+    dog_age_years: int = Field(..., description="반려견 나이(년)")
+    dog_weight_kg: int = Field(..., description="반려견 체중(kg)")
+    breed:         str = Field(..., description="견종")
 
 
 # POST /api/vet/chat 요청 스키마
@@ -23,9 +23,9 @@ class VetChatRequest(BaseModel):
     dog_id:          int                           = Field(...,   description="반려견 식별자")
     conversation_id: str                           = Field(...,   description="대화 세션 식별자")
     message:         VetChatMessage                = Field(...,   description="이번 턴 사용자 메시지")
-    image_url:       Optional[str]                 = Field(None,  description="첨부 이미지 URL (선택)")
-    history:         List[VetChatMessage]          = Field(default_factory=list, description="이전 대화 기록")
-    user_context:    Optional[VetUserContext]      = Field(None, description="반려견 기본 정보")
+    image_url:       Optional[str]                 = Field(None, description="첨부 이미지 URL (선택, nullable)")
+    history:         Optional[List[VetChatMessage]] = Field(None, description="이전 대화 기록 (선택, nullable)")
+    user_context:    Optional[VetUserContext]      = Field(None, description="반려견 기본 정보 (선택)")
 
 
 # RAG 인용 문서

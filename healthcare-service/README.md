@@ -4,6 +4,8 @@
 
 ## 기능
 - `POST /analyze`: 영상 URL을 받아 보행 분석 수행
+- `POST /jobs`: (옵션) job 기반 비동기 분석 요청 생성
+- `GET /jobs/{job_id}`: (옵션) 비동기 job 상태/결과 조회
 - `GET /health`: 헬스 체크
 - 분석 결과에 오버레이 영상 URL(S3) 포함, `DEBUG_MODE=true` 시 처리 메타데이터/디버그 정보 포함
 
@@ -16,6 +18,10 @@ DEBUG_MODE=false
 HEALTH_MODEL_ID=20-team-daeng-ddang-ai/dog-pose-estimation
 HEALTH_MODEL_FILENAME=best.pt
 MODEL_CACHE_DIR=models
+CHECK_MODEL_UPDATE_ON_START=true
+FORCE_REFRESH_MODELS=false
+MODEL_UPDATE_CHECK_INTERVAL_SECONDS=86400
+HEALTH_MODEL_REVISION_FILE=models/.health_model_revision
 
 # Hugging Face (private 모델일 경우 필요)
 HF_TOKEN=your_hf_token
@@ -26,6 +32,38 @@ AWS_SECRET_ACCESS_KEY=...
 AWS_REGION=ap-northeast-2
 S3_BUCKET_NAME=your-bucket
 S3_PREFIX=healthcare
+
+# Async job queue 모드
+ASYNC_JOB_MODE_ENABLED=false
+ASYNC_JOB_QUEUE_MAX_SIZE=100
+
+# (선택) AI -> 백엔드 작업 상태 콜백
+JOB_EVENT_CALLBACK_URL=https://backend.internal/api/healthcare/jobs/events
+JOB_EVENT_AUTH_TOKEN=internal_token
+JOB_EVENT_SOURCE=healthcare-service
+JOB_EVENT_TIMEOUT_SECONDS=3.0
+JOB_EVENT_MAX_RETRIES=3
+JOB_EVENT_RETRY_BACKOFF_SECONDS=0.5
+```
+
+상태 콜백은 `JOB_EVENT_CALLBACK_URL`가 설정된 경우에만 전송됩니다.
+`ASYNC_JOB_MODE_ENABLED=true`일 때는 `/analyze` 대신 `/jobs` 흐름을 사용합니다.
+`ASYNC_JOB_MODE_ENABLED=false`일 때는 기존 동기 `/analyze`만 사용합니다.
+
+콜백 payload 예시:
+```json
+{
+  "job_id": "analysis-id",
+  "status": "ANALYZING",
+  "message": "AI가 보행 영상을 분석 중입니다.",
+  "progress": 55,
+  "error_code": null,
+  "source": "healthcare-service",
+  "timestamp": "2026-03-05T01:23:45.678901+00:00",
+  "metadata": {
+    "dog_id": 123
+  }
+}
 ```
 
 ## 실행
@@ -37,15 +75,41 @@ pip install -r requirements.txt
 python run.py  # 기본 포트 8200
 ```
 
+## 모델 리비전 체크 동작
+- 시작 시 모델 로드 후 현재 HF revision을 로컬 파일(`models/.health_model_revision`)에 기록합니다.
+- 백그라운드 체크는 `MODEL_UPDATE_CHECK_INTERVAL_SECONDS` 주기로 동작합니다.
+- `FORCE_REFRESH_MODELS=true`면 주기마다 강제 리로드됩니다. 운영에서는 일반적으로 `false` 권장입니다.
+
 ## 엔드포인트 예시
+동기 모드(`ASYNC_JOB_MODE_ENABLED=false`):
 ```bash
 curl -X POST "http://localhost:8200/analyze" \
   -H "Content-Type: application/json" \
   -d '{
+    "analysis_id": "health-req-001",
     "video_url": "https://example.com/dog.mp4",
     "dog_id": 123
   }'
 ```
+
+비동기 job 모드(`ASYNC_JOB_MODE_ENABLED=true`):
+```bash
+curl -X POST "http://localhost:8200/jobs" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "analysis_id": "health-job-001",
+    "video_url": "https://example.com/dog.mp4",
+    "dog_id": 123
+  }'
+```
+
+```bash
+curl "http://localhost:8200/jobs/health-job-001"
+```
+
+## Docker 운영 메모
+- 컨테이너는 non-root 사용자로 실행됩니다.
+- `HEALTHCHECK`가 `/health`를 주기적으로 확인합니다.
 
 ## 구조
 ```

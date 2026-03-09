@@ -4,7 +4,7 @@ import logging
 import os
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import boto3
 from botocore.config import Config as BotoConfig
@@ -26,6 +26,7 @@ from app.core.config import (
     S3_PREFIX,
 )
 from app.schemas.health_schema import HealthAnalyzeRequest, HealthAnalyzeResponse
+from app.services.job_events import JobStatus, publish_job_event
 
 # Ensure DEBUG_MODE environment variable is propagated to analyze_health.Config
 if os.getenv("DEBUG_MODE") is None:
@@ -38,8 +39,9 @@ logger = logging.getLogger(__name__)
 
 
 class HealthAnalyzerService:
-    def __init__(self) -> None:
+    def __init__(self, model_revision: Optional[str] = None) -> None:
         self.output_dir = OUTPUT_DIR
+        self.model_revision = model_revision
         Path(self.output_dir).mkdir(parents=True, exist_ok=True)
 
         model_path = self._resolve_model_path()
@@ -59,12 +61,93 @@ class HealthAnalyzerService:
         else:
             logger.warning("S3_BUCKET_NAME not set. Overlay videos will not be uploaded.")
 
-    def analyze(self, req: HealthAnalyzeRequest) -> HealthAnalyzeResponse:
+    def _emit_status(
+        self,
+        analysis_id: str,
+        status: JobStatus,
+        message: str,
+        *,
+        progress: int | None = None,
+        error_code: str | None = None,
+        metadata: dict | None = None,
+        status_hook: Callable[..., None] | None = None,
+    ) -> None:
+        publish_job_event(
+            analysis_id,
+            status,
+            message,
+            progress=progress,
+            error_code=error_code,
+            metadata=metadata,
+        )
+        if status_hook:
+            status_hook(
+                status=status,
+                message=message,
+                progress=progress,
+                error_code=error_code,
+                metadata=metadata,
+            )
+
+    def analyze(
+        self,
+        req: HealthAnalyzeRequest,
+        *,
+        emit_queued_event: bool = True,
+        status_hook: Callable[..., None] | None = None,
+    ) -> HealthAnalyzeResponse:
         analysis_id = req.analysis_id or str(uuid.uuid4())
         dog_id = int(req.dog_id) if req.dog_id is not None else 123
 
         logger.info("Healthcare analyze start id=%s dog_id=%s debug=%s", analysis_id, dog_id, DEBUG_MODE)
-        report = self.analyzer.analyze_video(video_source=str(req.video_url), dog_id=dog_id, analysis_id=analysis_id)
+        if emit_queued_event:
+            self._emit_status(
+                analysis_id,
+                JobStatus.QUEUED,
+                "분석 요청을 접수했습니다.",
+                progress=5,
+                metadata={"dog_id": dog_id},
+                status_hook=status_hook,
+            )
+
+        try:
+            self._emit_status(
+                analysis_id,
+                JobStatus.PREPARING_INPUT,
+                "분석을 위한 입력 영상을 준비 중입니다.",
+                progress=15,
+                status_hook=status_hook,
+            )
+            self._emit_status(
+                analysis_id,
+                JobStatus.ANALYZING,
+                "AI가 보행 영상을 분석 중입니다.",
+                progress=55,
+                status_hook=status_hook,
+            )
+            report = self.analyzer.analyze_video(
+                video_source=str(req.video_url),
+                dog_id=dog_id,
+                analysis_id=analysis_id,
+            )
+        except Exception as exc:
+            self._emit_status(
+                analysis_id,
+                JobStatus.FAILED,
+                "AI 분석 중 오류가 발생했습니다.",
+                error_code="ANALYSIS_FAILED",
+                metadata={"detail": str(exc)},
+                status_hook=status_hook,
+            )
+            raise
+
+        self._emit_status(
+            analysis_id,
+            JobStatus.REPORT_GENERATING,
+            "분석 결과를 정리하고 있습니다.",
+            progress=85,
+            status_hook=status_hook,
+        )
 
         # Upload overlay artifact to S3 if available
         artifacts = report.get("artifacts") or {}
@@ -76,7 +159,15 @@ class HealthAnalyzerService:
                 artifacts["keypoint_overlay_video_url"] = uploaded_url
                 report["artifacts"] = artifacts
 
-        return HealthAnalyzeResponse.model_validate(report)
+        response = HealthAnalyzeResponse.model_validate(report)
+        self._emit_status(
+            analysis_id,
+            JobStatus.DONE,
+            "분석이 완료되었습니다.",
+            progress=100,
+            status_hook=status_hook,
+        )
+        return response
 
     def _upload_overlay(self, local_path: Path, analysis_id: str) -> Optional[str]:
         if not self.s3_client or not S3_BUCKET_NAME:
@@ -125,6 +216,7 @@ class HealthAnalyzerService:
                 downloaded = hf_hub_download(
                     repo_id=HEALTH_MODEL_ID,
                     filename=HEALTH_MODEL_FILENAME,
+                    revision=self.model_revision,
                     token=HF_TOKEN,
                     cache_dir=str(model_dir),
                 )

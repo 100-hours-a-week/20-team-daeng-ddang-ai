@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import requests
-import datetime
+import httpx
 
 from app.core.config import FACE_SERVICE_URL, FACE_HTTP_TIMEOUT_SECONDS
 from app.schemas.face_schema import FaceAnalyzeRequest, FaceAnalyzeResponse
@@ -12,19 +12,31 @@ from app.services.adapters.face_adapter import FaceAdapter
 class FaceHttpAdapter(FaceAdapter):
     def __init__(self) -> None:
         self.base_url = FACE_SERVICE_URL
+        # Reuse one async client to keep connection pooling/keep-alive benefits.
+        self._async_client = httpx.AsyncClient(timeout=FACE_HTTP_TIMEOUT_SECONDS)
 
     def analyze(self, request_id: str, req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
+        url = f"{self.base_url}/analyze"
+        payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
+        payload["request_id"] = request_id
+
+        r = requests.post(url, json=payload, timeout=FACE_HTTP_TIMEOUT_SECONDS)
+        r.raise_for_status()
+        data = r.json()
+        return self._build_response(request_id, req, data)
+
+    async def analyze_async(self, request_id: str, req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
         url = f"{self.base_url}/analyze"
 
         payload = req.model_dump() if hasattr(req, "model_dump") else req.dict()
         payload["request_id"] = request_id
 
-        # 외부 API 호출 (Timeout 설정 포함)
-        r = requests.post(url, json=payload, timeout=FACE_HTTP_TIMEOUT_SECONDS)
-
+        r = await self._async_client.post(url, json=payload)
         r.raise_for_status()
         data = r.json()
+        return self._build_response(request_id, req, data)
 
+    def _build_response(self, request_id: str, req: FaceAnalyzeRequest, data: dict) -> FaceAnalyzeResponse:
         # 외부 API 응답 처리:
         # 1. 스키마가 완벽히 일치하면 바로 변환 (Happy Path)
         # 2. 불일치하면 필드 매핑 시도 (Fallback) - 외부 스키마 변경 대응

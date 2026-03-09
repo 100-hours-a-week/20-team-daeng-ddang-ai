@@ -11,3 +11,8 @@ class VetChatAdapter(ABC):
     def chat(self, request_id: str, req: VetChatRequest) -> VetChatResponse:
         # 동기 방식으로 chatbot-service 호출 후 응답 반환
         raise NotImplementedError
+
+    @abstractmethod
+    async def chat_async(self, request_id: str, req: VetChatRequest) -> VetChatResponse:
+        # 비동기 방식으로 chatbot-service 호출 후 응답 반환
+        raise NotImplementedError

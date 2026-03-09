@@ -7,8 +7,7 @@ from pydantic import BaseModel, Field
 # 얼굴 분석 요청 스키마
 class FaceAnalyzeRequest(BaseModel):
     analysis_id: str = Field(..., description="분석 요청 식별자 (UUID 등)")
-    video_url: Optional[str] = Field(None, description="분석할 동영상 URL")
-    options: Dict[str, Any] = Field(default_factory=dict, description="추가 옵션 (예: 디버그 모드)")
+    video_url: str = Field(..., description="분석할 동영상 URL")
 
 # 얼굴 분석 결과 응답 스키마 (Unified)
 class FaceAnalyzeResponse(BaseModel):

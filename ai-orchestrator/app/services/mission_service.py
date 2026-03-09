@@ -2,7 +2,8 @@
 import logging, json
 from datetime import datetime
 from typing import List
-from fastapi import HTTPException # For re-raising 429
+import asyncio
+from fastapi import HTTPException
 from app.core.config import DEBUG
 from app.schemas.mission_schema import MissionResult, MissionInput
 from app.services.gemini_client import GeminiClient
@@ -88,60 +89,58 @@ def analyze_sync(missions: List[MissionInput]) -> List[MissionResult]:
             )
     return results
 
-# --- 비동기 확장용 (Async Expansion) ---
-# async def analyze_async(missions: List[MissionInput]) -> List[MissionResult]:
-#     # 비동기 처리를 위해서는 gather 등을 사용하여 병렬로 요청할 수 있습니다.
-#     import asyncio
-#
-#     results: List[MissionResult] = []
-#     
-#     # 각 미션에 대해 비동기 작업을 생성
-#     tasks = []
-#     for m in missions:
-#         tasks.append(_process_single_mission_async(m))
-#
-#     # 병렬 실행 및 결과 수집
-#     results = await asyncio.gather(*tasks)
-#     return list(results)
-#
-# async def _process_single_mission_async(m: MissionInput) -> MissionResult:
-#     try:
-#         prompt = build_prompt(m.mission_type.value)
-#         
-#         # GeminiClient에 추가된 async 메서드 사용 필요
-#         result_text = await gemini_client.generate_from_video_url_async(
-#             video_url=m.video_url,
-#             prompt_text=prompt
-#         )
-#         
-#         clean = result_text.strip()
-#         clean = clean.replace("```json", "").replace("```", "").strip()
-#
-#         l = clean.find("{")
-#         r = clean.rfind("}")
-#         if l != -1 and r != -1 and r > l:
-#             clean = clean[l:r+1]
-#
-#         result_json = json.loads(clean)
-#         
-#         return MissionResult(
-#             mission_id = m.mission_id,
-#             mission_type = m.mission_type,
-#             success = result_json.get("success", False),
-#             confidence = result_json.get("confidence", 0.0),
-#             reason = result_json.get("reason", "")
-#         )
-#         
-#     except Exception as e:
-#         logger.error(f"Async Mission Analysis Failed for {m.mission_id}: {e}")
-#         return MissionResult(
-#             mission_id = m.mission_id,
-#             mission_type = m.mission_type,
-#             success = False,
-#             confidence = 0.0,
-#             reason = f"Error: {str(e)}"
-#         )
-# -------------------------------------
+# 비동기 버전 (Async Expansion)
+async def analyze_async(missions: List[MissionInput]) -> List[MissionResult]:
+    """
+    비동기 병렬 처리를 통해 모든 미션을 동시에 분석합니다.
+    asyncio.gather를 사용하여 네트워크/API 대기 시간을 겹치게 처리합니다.
+    """
+    tasks = []
+    for m in missions:
+        tasks.append(_process_single_mission_async(m))
+
+    # 모든 미션을 병렬로 처리
+    results = await asyncio.gather(*tasks)
+    return list(results)
+
+async def _process_single_mission_async(m: MissionInput) -> MissionResult:
+    """단일 미션을 비동기로 처리합니다."""
+    try:
+        prompt = build_prompt(m.mission_type.value)
+        
+        # GeminiClient의 async 메서드 사용
+        result_text = await gemini_client.generate_from_video_url_async(
+            video_url=m.video_url,
+            prompt_text=prompt
+        )
+        
+        clean = result_text.strip()
+        clean = clean.replace("```json", "").replace("```", "").strip()
+
+        l = clean.find("{")
+        r = clean.rfind("}")
+        if l != -1 and r != -1 and r > l:
+            clean = clean[l:r+1]
+
+        result_json = json.loads(clean)
+        
+        return MissionResult(
+            mission_id = m.mission_id,
+            mission_type = m.mission_type,
+            success = result_json.get("success", False),
+            confidence = result_json.get("confidence", 0.0),
+            reason = result_json.get("reason", "") if DEBUG else None
+        )
+        
+    except Exception as e:
+        logger.exception(f"Async Mission Analysis Failed for {m.mission_id}")
+        return MissionResult(
+            mission_id = m.mission_id,
+            mission_type = m.mission_type,
+            success = False,
+            confidence = 0.0,
+            reason = None
+        )
 
 def now_iso() -> str:
     return datetime.now().astimezone().isoformat()

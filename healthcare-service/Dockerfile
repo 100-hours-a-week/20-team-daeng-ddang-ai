@@ -8,6 +8,10 @@ ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 WORKDIR /app
 
+# Create non-root user
+RUN addgroup --system app \
+    && adduser --system --ingroup app --home /app app
+
 # System deps (OpenCV-headless를 쓰지만 안정성을 위해 추가 기능 허용)
 RUN apt-get update && apt-get install -y \
     ffmpeg \
@@ -21,7 +25,15 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+RUN mkdir -p /app/models /app/output \
+    && chown -R app:app /app
 
 EXPOSE 8200
+
+USER app
+
+# Container-level health check
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8200/health', timeout=3)"
 
 CMD ["python", "run.py"]

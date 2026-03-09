@@ -34,3 +34,6 @@ class HealthcareMockAdapter(HealthcareAdapter):
             processing={"note": "mock_adapter"},
             error_code=None
         )
+
+    async def analyze_async(self, request_id: str, req: HealthcareAnalyzeRequest) -> HealthcareAnalyzeResponse:
+        return self.analyze(request_id, req)
