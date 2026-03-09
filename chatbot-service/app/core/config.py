@@ -9,9 +9,14 @@ load_dotenv()
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
 # 챗봇 모델 설정
+LLM_BACKEND = os.getenv("LLM_BACKEND", "local").lower()
 BASE_MODEL_ID = os.getenv("BASE_MODEL_ID", "Qwen/Qwen2.5-7B-Instruct")
 ADAPTER_PATH  = os.getenv("ADAPTER_PATH",  "models/Qwen2.5-7B/7B-LoRA")
 CHROMA_DB_DIR = os.getenv("CHROMA_DB_DIR", "models/chroma_db")
+VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8400").rstrip("/")
+VLLM_MODEL_NAME = os.getenv("VLLM_MODEL_NAME", BASE_MODEL_ID)
+VLLM_API_KEY = os.getenv("VLLM_API_KEY")
+VLLM_HTTP_TIMEOUT_SECONDS = float(os.getenv("VLLM_HTTP_TIMEOUT_SECONDS", "120"))
 
 # 임베딩/검색 설정
 EMBEDDING_MODEL_ID = os.getenv("EMBEDDING_MODEL_ID", "jhgan/ko-sroberta-multitask")

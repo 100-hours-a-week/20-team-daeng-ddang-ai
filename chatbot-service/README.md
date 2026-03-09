@@ -1,12 +1,12 @@
 # 🐶 Chatbot Service
 
-수의사 AI 챗봇 추론 서버입니다. RAG(Vector DB) + LoRA-Fine-tuned Qwen 7B 모델을 사용해 반려견 상담 답변을 생성합니다.
+수의사 AI 챗봇 추론 서버입니다. RAG(Vector DB) + Qwen 계열 모델을 사용해 반려견 상담 답변을 생성합니다. 생성 백엔드는 로컬 Hugging Face 또는 별도 `vLLM` 서버를 사용할 수 있습니다.
 
 ## 서비스 역할
 
 - `ai-orchestrator`로부터 내부 요청을 받아 챗봇 추론 수행
 - 클라이언트가 직접 이 서버를 호출하지 않음 (Backend → Orchestrator → Chatbot-Service)
-- RAG 기반 수의학 지식 검색 + LoRA 어댑터 적용 Qwen 7B 답변 생성
+- RAG 기반 수의학 지식 검색 + 생성 백엔드(local/vLLM) 호출
 
 ## API 엔드포인트
 
@@ -31,6 +31,8 @@ chmod +x setup.sh && ./setup.sh
   - LoRA Adapter → `models/Qwen2.5-7B/7B-LoRA/`
   - Vector DB → `models/chroma_db/`
 
+`LLM_BACKEND=vllm`일 때는 `chatbot-service`가 `vLLM`으로 생성 요청을 보내므로, 이 서비스는 최소한 `Vector DB`만 로컬에 있으면 됩니다.
+
 ### 3. 서버 실행
 
 ```bash
@@ -43,9 +45,14 @@ python run.py
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
+| `LLM_BACKEND` | `local` | 생성 백엔드 (`local` 또는 `vllm`) |
 | `BASE_MODEL_ID` | `Qwen/Qwen2.5-7B-Instruct` | HuggingFace 베이스 모델 ID |
 | `ADAPTER_PATH`  | `models/Qwen2.5-7B/7B-LoRA`  | LoRA 어댑터 경로 |
 | `CHROMA_DB_DIR` | `models/chroma_db`           | Vector DB 디렉토리 |
+| `VLLM_BASE_URL` | `http://localhost:8400` | vLLM OpenAI-compatible 서버 주소 |
+| `VLLM_MODEL_NAME` | `Qwen/Qwen2.5-7B-Instruct` | vLLM에 요청할 모델 이름 |
+| `VLLM_API_KEY` | 없음 | vLLM 인증 토큰 (선택) |
+| `VLLM_HTTP_TIMEOUT_SECONDS` | `120` | vLLM 요청 타임아웃 |
 | `EMBEDDING_MODEL_ID` | `jhgan/ko-sroberta-multitask` | 질의 임베딩 모델 ID |
 | `EMBEDDING_NORMALIZE` | `true` | 임베딩 L2 정규화 여부 |
 | `RAG_RETRIEVAL_K` | `5` | 1차 검색 문서 수 |
@@ -70,6 +77,13 @@ python run.py
 - 시작 시 자산 존재 여부와 HF revision을 확인해 필요한 경우만 다운로드합니다.
 - `FORCE_REFRESH_MODELS=true`면 주기마다 강제 갱신합니다.
 - 첫 실행 시 `sentence-transformers`, reranker 모델이 별도 캐시에 다운로드될 수 있습니다.
+- `LLM_BACKEND=vllm`일 때는 챗봇 서비스가 LoRA 가중치를 직접 로드하지 않습니다.
+
+## vLLM 연동
+
+- `chatbot-service`는 RAG 검색, 리랭크, 프롬프트 조합을 담당합니다.
+- 실제 텍스트 생성은 `vllm-service`가 담당할 수 있습니다.
+- 운영 시에는 `chatbot-service`와 `vllm-service`를 같은 GPU 서버에 두고 내부 주소로 연결하는 구성이 가장 단순합니다.
 
 ## Docker 운영 메모
 - 컨테이너는 non-root 사용자로 실행됩니다.
@@ -89,10 +103,11 @@ chatbot-service/
 │   ├── schemas/
 │   │   └── chat_schema.py    # Pydantic 요청/응답 모델
 │   ├── services/
-│   │   └── chat_service.py   # VetChatbotCore 싱글턴 래퍼
+│   │   ├── chat_service.py   # VetChatbotCore 싱글턴 래퍼
+│   │   └── generation/       # local/vLLM 생성 백엔드
 │   └── main.py               # FastAPI 앱 & 라우트
 ├── scripts/
-│   └── chatbot_core.py       # VetChatbotCore 핵심 로직
+│   └── chatbot_core.py       # RAG + generation backend 연동 로직
 └── models/                   # 모델 파일 (별도 다운로드)
     ├── Qwen2.5-7B/7B-LoRA/
     └── chroma_db/

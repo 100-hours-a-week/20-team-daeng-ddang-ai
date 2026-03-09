@@ -1,16 +1,16 @@
 import os
 from typing import Optional, List, Tuple
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from peft import PeftModel
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from huggingface_hub import HfApi, snapshot_download
 from sentence_transformers import CrossEncoder
 
+from app.services.generation import LocalGenerationClient, VllmGenerationClient
+
 class VetChatbotCore:
     def __init__(
         self,
+        llm_backend: str = "local",
         base_model_id: str = "Qwen/Qwen2.5-7B-Instruct",
         adapter_path: str = "models/Qwen2.5-7B/7B-LoRA",
         chroma_db_dir: str = "models/chroma_db",
@@ -24,7 +24,12 @@ class VetChatbotCore:
         gen_top_p: float = 0.9,
         gen_max_new_tokens: int = 384,
         gen_repetition_penalty: float = 1.08,
+        vllm_base_url: str = "http://localhost:8400",
+        vllm_model_name: Optional[str] = None,
+        vllm_api_key: Optional[str] = None,
+        vllm_timeout_seconds: float = 120,
     ):
+        self.llm_backend = llm_backend.lower()
         self.base_model_id = base_model_id
         self.adapter_path = adapter_path
         self.chroma_db_dir = chroma_db_dir
@@ -38,17 +43,20 @@ class VetChatbotCore:
         self.gen_top_p = min(max(gen_top_p, 0.0), 1.0)
         self.gen_max_new_tokens = max(64, gen_max_new_tokens)
         self.gen_repetition_penalty = max(1.0, gen_repetition_penalty)
+        self.vllm_base_url = vllm_base_url
+        self.vllm_model_name = vllm_model_name or base_model_id
+        self.vllm_api_key = vllm_api_key
+        self.vllm_timeout_seconds = max(1.0, vllm_timeout_seconds)
         self.assets_repo_id = os.getenv("CHATBOT_ASSETS_REPO_ID", "20-team-daeng-ddang-ai/vet-chat")
         self.assets_local_dir = os.getenv("CHATBOT_ASSETS_LOCAL_DIR", "models")
         self.check_model_update = self._env_bool("CHECK_MODEL_UPDATE_ON_START", True)
         self.force_refresh_models = self._env_bool("FORCE_REFRESH_MODELS", False)
         self.revision_file = os.getenv("MODEL_REVISION_FILE", os.path.join(self.assets_local_dir, ".vet_chat_revision"))
-        
-        self.tokenizer = None
-        self.model = None
+
+        self.generation_client = None
         self.retriever = None
         self.reranker = None
-        
+
         self._initialize()
 
     @staticmethod
@@ -75,15 +83,6 @@ class VetChatbotCore:
                 print(f"ℹ️ Adapter path remapped to local path: {local_candidate}")
                 return local_candidate
         return self.adapter_path
-
-    @staticmethod
-    def _select_torch_dtype() -> torch.dtype:
-        if not torch.cuda.is_available():
-            return torch.float32
-        # bfloat16 is not supported on older GPUs (e.g., T4). Use float16 fallback.
-        if torch.cuda.is_bf16_supported():
-            return torch.bfloat16
-        return torch.float16
 
     def _read_local_revision(self) -> Optional[str]:
         if not os.path.isfile(self.revision_file):
@@ -119,6 +118,7 @@ class VetChatbotCore:
         needs_download = self.force_refresh_models
         target_revision = None
         reasons = []
+        allow_patterns = ["chroma_db/*"]
 
         if self.force_refresh_models:
             reasons.append("FORCE_REFRESH_MODELS=true")
@@ -126,11 +126,13 @@ class VetChatbotCore:
             print(f"⚠️ Chroma DB not found at {self.chroma_db_dir}.")
             needs_download = True
             reasons.append("missing chroma_db")
-        local_adapter_path = self._resolve_local_adapter_path()
-        if local_adapter_path and not self._dir_has_files(local_adapter_path):
-            print(f"⚠️ LoRA Adapter not found at {self.adapter_path}.")
-            needs_download = True
-            reasons.append("missing LoRA adapter")
+        if self.llm_backend == "local":
+            allow_patterns.append("Qwen2.5-7B/7B-LoRA/*")
+            local_adapter_path = self._resolve_local_adapter_path()
+            if local_adapter_path and not self._dir_has_files(local_adapter_path):
+                print(f"⚠️ LoRA Adapter not found at {self.adapter_path}.")
+                needs_download = True
+                reasons.append("missing LoRA adapter")
 
         if self.check_model_update:
             remote_revision = self._get_remote_revision(hf_token)
@@ -150,7 +152,7 @@ class VetChatbotCore:
             print(f"📥 Downloading required assets ({reason_text}) from {self.assets_repo_id} into '{self.assets_local_dir}/'...")
             snapshot_download(
                 repo_id=self.assets_repo_id,
-                allow_patterns=["chroma_db/*", "Qwen2.5-7B/7B-LoRA/*"],
+                allow_patterns=allow_patterns,
                 local_dir=self.assets_local_dir,
                 revision=target_revision,
                 token=hf_token
@@ -164,43 +166,38 @@ class VetChatbotCore:
     def _initialize(self):
         hf_token = os.getenv("HUGGING_FACE_HUB_TOKEN")
 
-        # 모델 구동 전 허깅페이스에서 로컬 파일(models/)로 강제 다운로드
+        # 모델 구동 전 허깅페이스에서 로컬 파일(models/)로 필요한 자산을 다운로드
         self._download_hf_assets(hf_token)
-        self.adapter_path = self._resolve_local_adapter_path()
-        torch_dtype = self._select_torch_dtype()
-        device_map = "auto" if torch.cuda.is_available() else "cpu"
-
-        print(f"Loading tokenizer & models... (Base: {self.base_model_id}, Adapter: {self.adapter_path})")
-
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.base_model_id,
-            token=hf_token
-        )
-
-        # Load Base Model
-        base_model = AutoModelForCausalLM.from_pretrained(
-            self.base_model_id,
-            device_map=device_map,
-            torch_dtype=torch_dtype,
-            token=hf_token
-        )
-
-        # Inject LoRA Adapter
-        # 만약 로컬 폴더이거나 '/' 문자가 포함된 허깅페이스 레포지토리 주소라면 어댑터 로드를 시도합니다.
-        if self.adapter_path and os.path.exists(self.adapter_path):
+        if self.llm_backend == "local":
+            self.adapter_path = self._resolve_local_adapter_path()
+            print(f"Loading local generation model... (Base: {self.base_model_id}, Adapter: {self.adapter_path})")
             try:
-                self.model = PeftModel.from_pretrained(
-                    base_model,
-                    self.adapter_path,
-                    token=hf_token
+                self.generation_client = LocalGenerationClient(
+                    base_model_id=self.base_model_id,
+                    adapter_path=self.adapter_path if os.path.exists(self.adapter_path) else "",
+                    hf_token=hf_token,
+                    gen_temperature=self.gen_temperature,
+                    gen_top_p=self.gen_top_p,
+                    gen_max_new_tokens=self.gen_max_new_tokens,
+                    gen_repetition_penalty=self.gen_repetition_penalty,
                 )
-                print("✅ LoRA Adapter loaded successfully.")
+                print("✅ Local generation backend loaded.")
             except Exception as e:
-                print(f"⚠️ Failed to load LoRA Adapter '{self.adapter_path}': {e}. Running with Base Model only.")
-                self.model = base_model
+                raise RuntimeError(f"Failed to initialize local generation backend: {e}") from e
+        elif self.llm_backend == "vllm":
+            self.generation_client = VllmGenerationClient(
+                base_url=self.vllm_base_url,
+                model_name=self.vllm_model_name,
+                timeout_seconds=self.vllm_timeout_seconds,
+                api_key=self.vllm_api_key,
+                gen_temperature=self.gen_temperature,
+                gen_top_p=self.gen_top_p,
+                gen_max_new_tokens=self.gen_max_new_tokens,
+                gen_repetition_penalty=self.gen_repetition_penalty,
+            )
+            print(f"✅ vLLM generation backend configured: {self.vllm_base_url} (model={self.vllm_model_name})")
         else:
-            self.model = base_model
-            print("⚠️ No valid LoRA Adapter path provided. Running with Base Model only.")
+            raise ValueError(f"Unsupported llm backend: {self.llm_backend}")
 
         print(
             f"Loading Vector DB... (embedding={self.embedding_model_id}, normalize={self.embedding_normalize}, "
@@ -297,34 +294,11 @@ class VetChatbotCore:
             messages.append(past_msg)
             
         messages.append({"role": "user", "content": user_prompt})
-        
+
         # 5. 모델 추론
-        prompt = self.tokenizer.apply_chat_template(
-            messages, 
-            tokenize=False, 
-            add_generation_prompt=True
-        )
-        
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
-
-        with torch.no_grad():
-            try:
-                outputs = self.model.generate(
-                    **inputs,
-                    max_new_tokens=self.gen_max_new_tokens,
-                    pad_token_id=self.tokenizer.eos_token_id,
-                    temperature=self.gen_temperature,
-                    top_p=self.gen_top_p,
-                    repetition_penalty=self.gen_repetition_penalty,
-                )
-            except torch.cuda.OutOfMemoryError as e:
-                raise RuntimeError(
-                    "GPU OOM while generating answer. "
-                    "Reduce max_new_tokens, shorten history/context, or use a larger GPU."
-                ) from e
-
-        input_length = inputs.input_ids.shape[1]
-        response_text = self.tokenizer.decode(outputs[0][input_length:], skip_special_tokens=True).strip()
+        if self.generation_client is None:
+            raise RuntimeError("Generation client is not initialized.")
+        response_text = self.generation_client.generate(messages)
 
         return {
             "answer": response_text,
