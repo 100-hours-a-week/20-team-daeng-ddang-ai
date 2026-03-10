@@ -11,9 +11,14 @@ from typing import Optional
 from huggingface_hub import HfApi
 
 from app.core.config import (
+    LLM_BACKEND,
     BASE_MODEL_ID,
     ADAPTER_PATH,
     CHROMA_DB_DIR,
+    VLLM_BASE_URL,
+    VLLM_MODEL_NAME,
+    VLLM_API_KEY,
+    VLLM_HTTP_TIMEOUT_SECONDS,
     EMBEDDING_MODEL_ID,
     EMBEDDING_NORMALIZE,
     RAG_RETRIEVAL_K,
@@ -72,9 +77,14 @@ def _get_remote_revision() -> Optional[str]:
 def _create_engine():
     from scripts.chatbot_core import VetChatbotCore
     return VetChatbotCore(
+        llm_backend=LLM_BACKEND,
         base_model_id=BASE_MODEL_ID,
         adapter_path=ADAPTER_PATH,
         chroma_db_dir=CHROMA_DB_DIR,
+        vllm_base_url=VLLM_BASE_URL,
+        vllm_model_name=VLLM_MODEL_NAME,
+        vllm_api_key=VLLM_API_KEY,
+        vllm_timeout_seconds=VLLM_HTTP_TIMEOUT_SECONDS,
         embedding_model_id=EMBEDDING_MODEL_ID,
         embedding_normalize=EMBEDDING_NORMALIZE,
         retrieval_k=RAG_RETRIEVAL_K,
@@ -91,7 +101,9 @@ def _create_engine():
 def initialize_engine():
     """FastAPI lifespan에서 호출. VetChatbotCore를 메모리에 로드."""
     global _chatbot_engine
-    logger.info(f"VetChatbotCore 초기화 시작 (base={BASE_MODEL_ID}, adapter={ADAPTER_PATH})")
+    logger.info(
+        f"VetChatbotCore 초기화 시작 (backend={LLM_BACKEND}, base={BASE_MODEL_ID}, adapter={ADAPTER_PATH})"
+    )
     try:
         new_engine = _create_engine()
         with _engine_lock:
@@ -192,7 +204,8 @@ def generate_chat_response(req: ChatRequest) -> ChatResponse:
         citations=citations,
         processing={
             "latency_ms": elapsed_ms,
-            "model_used": BASE_MODEL_ID,
+            "model_used": VLLM_MODEL_NAME if LLM_BACKEND == "vllm" else BASE_MODEL_ID,
+            "llm_backend": LLM_BACKEND,
             "retrieval_k": RAG_RETRIEVAL_K,
             "final_top_k": RAG_FINAL_TOP_K,
             "rerank_enabled": RAG_RERANK_ENABLED,

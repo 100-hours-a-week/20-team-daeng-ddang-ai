@@ -34,6 +34,7 @@ import requests
 import httpx
 
 BASE = "http://localhost:8000"
+DEFAULT_RESULTS_DIR = Path("scripts/bench_results")
 
 
 def endpoint_url(endpoint: str) -> str:
@@ -194,6 +195,24 @@ def save_results(
     print(f"\n✅ Results saved to: {output_path}")
 
 
+def default_output_path(
+    endpoints: list[str],
+    mode: str,
+    concurrency: int,
+    mix_endpoints: bool,
+    label: str | None,
+) -> str:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    endpoint_part = "-".join(endpoints)
+    parts = [label or endpoint_part, mode]
+    if mode == "async":
+        parts.append(f"c{concurrency}")
+        parts.append("mixed" if mix_endpoints else "fair")
+    parts.append(timestamp)
+    filename = "_".join(parts) + ".json"
+    return str(DEFAULT_RESULTS_DIR / filename)
+
+
 async def async_worker(
     endpoints: list[str],
     count: int,
@@ -270,6 +289,8 @@ def main():
                         help="send requests concurrently")
     parser.add_argument("--output", "-o", type=str, default=None,
                         help="save results to JSON file (e.g., results.json)")
+    parser.add_argument("--label", type=str, default=None,
+                        help="label prefix for auto-generated output filenames")
     parser.add_argument("--timeout-seconds", type=int, default=60,
                         help="request timeout in seconds (default: 60)")
     parser.add_argument("--concurrency", type=int, default=4,
@@ -293,17 +314,22 @@ def main():
     else:
         results, failures = sync_worker(args.endpoints, args.count, args.timeout_seconds)
     
-    # save results if output path is specified
-    if args.output:
-        save_results(
-            results,
-            failures,
-            args.count,
-            mode,
-            args.output,
-            args.concurrency if args.use_async else 1,
-            args.mix_endpoints if args.use_async else False,
-        )
+    output_path = args.output or default_output_path(
+        endpoints=args.endpoints,
+        mode=mode,
+        concurrency=args.concurrency if args.use_async else 1,
+        mix_endpoints=args.mix_endpoints if args.use_async else False,
+        label=args.label,
+    )
+    save_results(
+        results,
+        failures,
+        args.count,
+        mode,
+        output_path,
+        args.concurrency if args.use_async else 1,
+        args.mix_endpoints if args.use_async else False,
+    )
 
 
 if __name__ == "__main__":
