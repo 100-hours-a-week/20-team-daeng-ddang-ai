@@ -1,5 +1,12 @@
 # app/core/config.py
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+# Load service-local .env regardless of the process working directory.
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 # 디버그 모드 (True일 경우 상세 로그 및 사유 반환)
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
