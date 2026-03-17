@@ -15,3 +15,4 @@ python-multipart==0.0.22
 uvloop==0.22.1
 httpx==0.28.1
 python-dotenv==1.2.1
+open_clip_torch==2.29.0

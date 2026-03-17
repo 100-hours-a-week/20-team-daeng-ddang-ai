@@ -20,3 +20,7 @@ FACE_EMOTION_REVISION_FILE = os.getenv("FACE_EMOTION_REVISION_FILE", "models/.fa
 
 # Force CPU Device (Default: cpu) - can be overridden by env var 'TORCH_DEVICE'
 TORCH_DEVICE = os.getenv("TORCH_DEVICE", "cpu")
+
+# MobileCLIP 강아지 사전 판별 설정
+DOG_FILTER_ENABLED = os.getenv("DOG_FILTER_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+DOG_FILTER_THRESHOLD = float(os.getenv("DOG_FILTER_THRESHOLD", "0.4"))
