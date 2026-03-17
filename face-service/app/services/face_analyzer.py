@@ -239,13 +239,13 @@ class FaceAnalyzer:
                 self.dog_filter_enabled = False
             else:
                 try:
-                    logger.info("MobileCLIP-S0 강아지 판별 모델 로딩 중...")
+                    logger.info("MobileCLIP-S1 강아지 판별 모델 로딩 중...")
                     self.clip_model, _, self.clip_preprocess = open_clip.create_model_and_transforms(
-                        'MobileCLIP-S0',
-                        pretrained='datacomp_s34b_b4k',
+                        'MobileCLIP-S1',
+                        pretrained='datacompdr',
                     )
                     self.clip_model.eval()
-                    self.clip_tokenizer = open_clip.get_tokenizer('MobileCLIP-S0')
+                    self.clip_tokenizer = open_clip.get_tokenizer('MobileCLIP-S1')
 
                     # 판별용 텍스트를 미리 숫자(토큰)로 변환해둠
                     # → 매 요청마다 변환하면 느려지니까, 서버 시작 시 1번만 해둠
@@ -262,7 +262,7 @@ class FaceAnalyzer:
                         "a photo of outdoor scenery without animals",# 풍경/배경 (나무, 건물, 도로)
                     ]
                     self.clip_text_tokens = self.clip_tokenizer(dog_filter_texts)
-                    logger.info("MobileCLIP-S0 강아지 판별 모델 로딩 완료")
+                    logger.info("MobileCLIP-S1 강아지 판별 모델 로딩 완료")
                 except Exception as e:
                     logger.error(f"MobileCLIP 로딩 실패, 강아지 필터를 비활성화합니다: {e}")
                     self.dog_filter_enabled = False
@@ -298,10 +298,13 @@ class FaceAnalyzer:
             # 텍스트들에서 특징 벡터 추출
             text_features = self.clip_model.encode_text(self.clip_text_tokens)
 
-            # 3. 유사도 계산 (코사인 유사도 → softmax로 확률 변환)
+            # 3. 유사도 계산 (코사인 유사도 × logit_scale → softmax로 확률 변환)
+            # logit_scale: CLIP이 학습 시 함께 학습한 스케일링 값 (약 100)
+            # → 코사인 유사도의 미세한 차이를 증폭시켜 softmax가 제대로 구분하도록 함
             image_features /= image_features.norm(dim=-1, keepdim=True)
             text_features /= text_features.norm(dim=-1, keepdim=True)
-            similarity = (image_features @ text_features.T).softmax(dim=-1)[0]
+            logit_scale = self.clip_model.logit_scale.exp()
+            similarity = (logit_scale * image_features @ text_features.T).softmax(dim=-1)[0]
 
         # 4. 첫 번째 텍스트 = "a photo of a real living dog"의 점수
         dog_score = similarity[0].item()
