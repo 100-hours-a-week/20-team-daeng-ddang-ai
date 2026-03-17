@@ -29,7 +29,7 @@ from app.core.config import (
 from app.schemas.face_schema import FaceAnalyzeRequest, FaceAnalyzeResponse
 
 # 표정 분석 설정
-FACE_CONF_THRESHOLD = 0.65     # 얼굴 탐지 신뢰도 임계값
+FACE_CONF_THRESHOLD = 0.75     # 얼굴 탐지 신뢰도 임계값
 FACE_AREA_MIN_RATIO = 0.02     # 프레임 대비 얼굴 최소 크기 비율 (2%)
 MAX_FRAMES = 12                # 분석할 최대 프레임 수
 # DOG_CLASS_ID는 모델 로드 시 동적으로 결정되지만 기본값으로 설정
