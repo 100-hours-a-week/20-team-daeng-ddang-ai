@@ -5,6 +5,7 @@ import os
 import uuid
 from pathlib import Path
 from typing import Callable, Optional
+from zoneinfo import ZoneInfo
 
 import boto3
 from botocore.config import Config as BotoConfig
@@ -36,6 +37,7 @@ if os.getenv("DEBUG_MODE") is None:
 from scripts.analyze_health import DogHealthAnalyzer  # type: ignore
 
 logger = logging.getLogger(__name__)
+SEOUL_TZ = ZoneInfo("Asia/Seoul")
 
 
 class HealthAnalyzerService:
@@ -150,14 +152,18 @@ class HealthAnalyzerService:
         )
 
         # Upload overlay artifact to S3 if available
-        artifacts = report.get("artifacts") or {}
+        artifacts = dict(report.get("artifacts") or {})
         overlay_name = artifacts.get("keypoint_overlay_video_url")
         if overlay_name:
             local_overlay = Path(self.output_dir) / overlay_name
             uploaded_url = self._upload_overlay(local_overlay, analysis_id)
             if uploaded_url:
                 artifacts["keypoint_overlay_video_url"] = uploaded_url
-                report["artifacts"] = artifacts
+            else:
+                artifacts["keypoint_overlay_video_url"] = None
+                if not report.get("error_code"):
+                    report["error_code"] = "OVERLAY_UPLOAD_FAILED"
+            report["artifacts"] = artifacts
 
         response = HealthAnalyzeResponse.model_validate(report)
         self._emit_status(
@@ -171,6 +177,7 @@ class HealthAnalyzerService:
 
     def _upload_overlay(self, local_path: Path, analysis_id: str) -> Optional[str]:
         if not self.s3_client or not S3_BUCKET_NAME:
+            logger.warning("S3 upload unavailable. Missing client or bucket. analysis_id=%s", analysis_id)
             return None
 
         if not local_path.exists():
@@ -179,7 +186,7 @@ class HealthAnalyzerService:
 
         # Create a time-based folder structure: S3_PREFIX/YYYY/MM/DD/filename
         from datetime import datetime
-        now = datetime.now()
+        now = datetime.now(SEOUL_TZ)
         year_month_day_path = f"{now.strftime('%Y')}/{now.strftime('%m')}/{now.strftime('%d')}"
         s3_key = f"{S3_PREFIX.rstrip('/')}/{year_month_day_path}/{local_path.name}"
         

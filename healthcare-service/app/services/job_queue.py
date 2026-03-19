@@ -5,8 +5,9 @@ import logging
 import threading
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Callable, Optional
+from zoneinfo import ZoneInfo
 
 from starlette.concurrency import run_in_threadpool
 
@@ -21,10 +22,11 @@ from app.services.health_analyzer import HealthAnalyzerService
 from app.services.job_events import JobStatus, publish_job_event
 
 logger = logging.getLogger(__name__)
+SEOUL_TZ = ZoneInfo("Asia/Seoul")
 
 
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+def _seoul_now_iso() -> str:
+    return datetime.now(SEOUL_TZ).isoformat()
 
 
 @dataclass
@@ -74,7 +76,7 @@ class HealthcareJobQueue:
 
         job_id = req.analysis_id or str(uuid.uuid4())
         req_with_id = req.model_copy(update={"analysis_id": job_id})
-        now = _utc_now_iso()
+        now = _seoul_now_iso()
 
         state = _JobState(
             job_id=job_id,
@@ -189,7 +191,7 @@ class HealthcareJobQueue:
             state.result = result
             state.status = JobStatus.DONE
             state.progress = 100
-            state.timestamp = _utc_now_iso()
+            state.timestamp = _seoul_now_iso()
             state.error_code = None
             state.message = "분석이 완료되었습니다."
 
@@ -210,4 +212,4 @@ class HealthcareJobQueue:
             state.progress = progress
             state.error_code = error_code
             state.message = message
-            state.timestamp = _utc_now_iso()
+            state.timestamp = _seoul_now_iso()

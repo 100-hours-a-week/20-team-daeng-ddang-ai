@@ -3,15 +3,18 @@ from __future__ import annotations
 
 import datetime
 import uuid
+from zoneinfo import ZoneInfo
 
 from app.schemas.healthcare_schema import HealthcareAnalyzeRequest, HealthcareAnalyzeResponse
 from app.services.adapters.healthcare_adapter import HealthcareAdapter
+
+SEOUL_TZ = ZoneInfo("Asia/Seoul")
 
 
 class HealthcareMockAdapter(HealthcareAdapter):
     def analyze(self, request_id: str, req: HealthcareAnalyzeRequest) -> HealthcareAnalyzeResponse:
         analysis_id = req.analysis_id or request_id or str(uuid.uuid4())
-        now = datetime.datetime.now().isoformat()
+        now = datetime.datetime.now(SEOUL_TZ).isoformat()
 
         # Lightweight dummy response mimicking analyze_health output
         return HealthcareAnalyzeResponse(

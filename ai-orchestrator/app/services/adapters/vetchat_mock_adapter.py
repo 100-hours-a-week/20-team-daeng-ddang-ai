@@ -2,17 +2,20 @@
 from __future__ import annotations
 
 import datetime
+from zoneinfo import ZoneInfo
 
 from app.core.config import DEBUG
 from app.schemas.vetchat_schema import VetChatRequest, VetChatResponse, VetCitation
 from app.services.adapters.vetchat_adapter import VetChatAdapter
+
+SEOUL_TZ = ZoneInfo("Asia/Seoul")
 
 
 class VetChatMockAdapter(VetChatAdapter):
     """개발/테스트용 Mock 어댑터 — chatbot-service 없이 더미 응답 반환"""
 
     def chat(self, request_id: str, req: VetChatRequest) -> VetChatResponse:
-        now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        now = datetime.datetime.now(SEOUL_TZ).isoformat()
         question = req.message.content
 
         # 반려견 정보 기반 간단한 Mock 답변 생성

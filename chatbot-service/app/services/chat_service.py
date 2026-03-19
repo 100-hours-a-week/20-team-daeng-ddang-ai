@@ -7,6 +7,7 @@ import time
 import logging
 import threading
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from huggingface_hub import HfApi
 
@@ -34,6 +35,7 @@ from app.core.config import (
 from app.schemas.chat_schema import ChatRequest, ChatResponse, Citation
 
 logger = logging.getLogger(__name__)
+SEOUL_TZ = ZoneInfo("Asia/Seoul")
 
 # 싱글턴 - 앱 시작 시 한 번만 초기화
 _chatbot_engine = None
@@ -184,7 +186,7 @@ def generate_chat_response(req: ChatRequest) -> ChatResponse:
     )
 
     elapsed_ms = int(time.time() * 1000 - start_ms)
-    now = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = datetime.datetime.now(SEOUL_TZ).isoformat()
 
     citations = [
         Citation(

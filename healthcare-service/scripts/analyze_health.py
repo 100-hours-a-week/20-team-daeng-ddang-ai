@@ -9,6 +9,9 @@ import uuid
 import requests
 import tempfile
 import time
+from zoneinfo import ZoneInfo
+
+SEOUL_TZ = ZoneInfo("Asia/Seoul")
 
 class Config:
     # 런타임 및 안전장치 설정
@@ -109,7 +112,7 @@ class DogHealthAnalyzer:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         video_duration = total_frames / fps if fps > 0 else 0
 
-        overlay_filename = f"overlay_{analysis_id}.mp4"
+        overlay_filename = f"overlay_{uuid.uuid4().hex}.mp4"
         overlay_path = os.path.join(self.output_dir, overlay_filename)
         temp_overlay_path = os.path.join(self.output_dir, f"temp_{overlay_filename}")
         
@@ -393,7 +396,7 @@ class DogHealthAnalyzer:
         return {
             "analysis_id": aid,
             "dog_id": int(did), # Force int as per user schema
-            "analyze_at": datetime.now().isoformat(),
+            "analyze_at": datetime.now(SEOUL_TZ).isoformat(),
             "result": {
                 "overall_score": overall, # Included as per latest request
                 "overall_risk_level": patella_lvl, 
@@ -477,7 +480,7 @@ class DogHealthAnalyzer:
     
     def _error(self, aid, did, code):
         """표준 에러 응답 객체 생성"""
-        return {"analysis_id": aid, "dog_id": int(did), "analyze_at": datetime.now().isoformat(), "error_code": code}
+        return {"analysis_id": aid, "dog_id": int(did), "analyze_at": datetime.now(SEOUL_TZ).isoformat(), "error_code": code}
     
     # 수학/통계 연산 보조 함수
     def _naninterp(self, x):

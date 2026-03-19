@@ -3,6 +3,7 @@ import logging, json
 from datetime import datetime
 from typing import List
 import asyncio
+from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 from app.core.config import DEBUG
 from app.schemas.mission_schema import MissionResult, MissionInput
@@ -12,6 +13,7 @@ from app.services.prompts.mission_judge import build_prompt
 gemini_client = GeminiClient()
 
 logger = logging.getLogger(__name__)
+SEOUL_TZ = ZoneInfo("Asia/Seoul")
 
 import backoff 
 from google.api_core.exceptions import ResourceExhausted
@@ -143,4 +145,4 @@ async def _process_single_mission_async(m: MissionInput) -> MissionResult:
         )
 
 def now_iso() -> str:
-    return datetime.now().astimezone().isoformat()
+    return datetime.now(SEOUL_TZ).isoformat()

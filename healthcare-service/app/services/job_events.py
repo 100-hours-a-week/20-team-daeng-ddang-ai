@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -18,6 +19,7 @@ from app.core.config import (
 )
 
 logger = logging.getLogger(__name__)
+SEOUL_TZ = ZoneInfo("Asia/Seoul")
 
 
 class JobStatus(str, Enum):
@@ -48,7 +50,7 @@ def publish_job_event(
         "progress": progress,
         "error_code": error_code,
         "source": JOB_EVENT_SOURCE,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(SEOUL_TZ).isoformat(),
         "metadata": metadata or {},
     }
     headers = {"Content-Type": "application/json"}
