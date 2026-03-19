@@ -25,11 +25,13 @@ from app.core.config import (
     HF_TOKEN,
     DEBUG,
     TORCH_DEVICE,
+    DOG_FILTER_ENABLED,
+    DOG_FILTER_THRESHOLD,
 )
 from app.schemas.face_schema import FaceAnalyzeRequest, FaceAnalyzeResponse
 
 # 표정 분석 설정
-FACE_CONF_THRESHOLD = 0.65     # 얼굴 탐지 신뢰도 임계값
+FACE_CONF_THRESHOLD = 0.75     # 얼굴 탐지 신뢰도 임계값
 FACE_AREA_MIN_RATIO = 0.02     # 프레임 대비 얼굴 최소 크기 비율 (2%)
 MAX_FRAMES = 12                # 분석할 최대 프레임 수
 # DOG_CLASS_ID는 모델 로드 시 동적으로 결정되지만 기본값으로 설정
@@ -68,9 +70,11 @@ try:
     import torch.nn.functional as F
     import torchvision
     from torchvision import models
+    import open_clip
 except ImportError:
     YOLO = None
     torchvision = None
+    open_clip = None
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +230,43 @@ class FaceAnalyzer:
             logger.error(f"Failed to load emotion model: {e}")
             raise e
 
+        # 3. MobileCLIP 강아지 사전 판별 모델 로드
+        # → 강아지 인형, 늑대, 여우 등 "강아지가 아닌 대상"을 걸러내는 필터 역할
+        self.dog_filter_enabled = DOG_FILTER_ENABLED
+        if self.dog_filter_enabled:
+            if open_clip is None:
+                logger.warning("open_clip 라이브러리가 설치되지 않아 강아지 필터를 비활성화합니다.")
+                self.dog_filter_enabled = False
+            else:
+                try:
+                    logger.info("MobileCLIP-S1 강아지 판별 모델 로딩 중...")
+                    self.clip_model, _, self.clip_preprocess = open_clip.create_model_and_transforms(
+                        'MobileCLIP-S1',
+                        pretrained='datacompdr',
+                    )
+                    self.clip_model.eval()
+                    self.clip_tokenizer = open_clip.get_tokenizer('MobileCLIP-S1')
+
+                    # 판별용 텍스트를 미리 숫자(토큰)로 변환해둠
+                    # → 매 요청마다 변환하면 느려지니까, 서버 시작 시 1번만 해둠
+                    # 한국 반려견 산책 상황에서 카메라에 찍힐 수 있는 대상들
+                    dog_filter_texts = [
+                        "a photo of a real living dog",              # 진짜 강아지 (통과 대상)
+                        "a photo of a person or human",              # 사람 (보호자, 행인)
+                        "a photo of a cat",                          # 고양이 (길고양이)
+                        "a photo of a bird or pigeon",               # 새 (비둘기 등)
+                        "a photo of a stuffed animal toy",           # 동물 인형/봉제인형
+                        "a photo of a wolf or fox",                  # 늑대/여우
+                        "a photo of food or snacks",                 # 음식/간식
+                        "a photo of a car or vehicle",               # 자동차/오토바이
+                        "a photo of outdoor scenery without animals",# 풍경/배경 (나무, 건물, 도로)
+                    ]
+                    self.clip_text_tokens = self.clip_tokenizer(dog_filter_texts)
+                    logger.info("MobileCLIP-S1 강아지 판별 모델 로딩 완료")
+                except Exception as e:
+                    logger.error(f"MobileCLIP 로딩 실패, 강아지 필터를 비활성화합니다: {e}")
+                    self.dog_filter_enabled = False
+
     def _ensure_dependencies(self):
         if YOLO is None or torchvision is None:
             raise RuntimeError("Required ML dependencies are missing.")
@@ -233,6 +274,51 @@ class FaceAnalyzer:
     def _authenticate_hf(self):
         if HF_TOKEN:
             login(token=HF_TOKEN)
+
+    def _is_real_dog(self, pil_image: Image.Image) -> bool:
+        """MobileCLIP으로 이미지가 진짜 살아있는 강아지인지 판별한다.
+
+        동작 원리:
+        1. 이미지를 MobileCLIP이 이해할 수 있는 형태(텐서)로 변환
+        2. 이미지의 특징(image_features)을 추출
+        3. 미리 준비해둔 텍스트들의 특징(text_features)과 비교
+        4. "a photo of a real living dog" 텍스트와의 유사도가 가장 높으면 → 강아지!
+
+        Returns:
+            True: 진짜 강아지로 판별됨 → 다음 단계(YOLO + 표정 분류)로 진행
+            False: 강아지가 아님 → 이 프레임 건너뜀
+        """
+        # 1. 이미지를 모델 입력 형태로 변환 (리사이즈, 정규화 등)
+        image_input = self.clip_preprocess(pil_image).unsqueeze(0)
+
+        # 2. 모델 실행 (학습 아님, 추론만 하므로 no_grad)
+        with torch.no_grad():
+            # 이미지에서 특징 벡터 추출
+            image_features = self.clip_model.encode_image(image_input)
+            # 텍스트들에서 특징 벡터 추출
+            text_features = self.clip_model.encode_text(self.clip_text_tokens)
+
+            # 3. 유사도 계산 (코사인 유사도 × logit_scale → softmax로 확률 변환)
+            # logit_scale: CLIP이 학습 시 함께 학습한 스케일링 값 (약 100)
+            # → 코사인 유사도의 미세한 차이를 증폭시켜 softmax가 제대로 구분하도록 함
+            image_features /= image_features.norm(dim=-1, keepdim=True)
+            text_features /= text_features.norm(dim=-1, keepdim=True)
+            logit_scale = self.clip_model.logit_scale.exp()
+            similarity = (logit_scale * image_features @ text_features.T).softmax(dim=-1)[0]
+
+        # 4. 첫 번째 텍스트 = "a photo of a real living dog"의 점수
+        dog_score = similarity[0].item()
+
+        if DEBUG:
+            labels = [
+                "real_dog", "person", "cat", "bird", "stuffed_toy",
+                "wolf_fox", "food", "vehicle", "scenery"
+            ]
+            scores_str = ", ".join(f"{l}={similarity[i].item():.3f}" for i, l in enumerate(labels))
+            logger.debug(f"MobileCLIP 판별 결과: {scores_str} (threshold={DOG_FILTER_THRESHOLD})")
+
+        # 5. 임계값 이상이면 "진짜 강아지"로 판정
+        return dog_score >= DOG_FILTER_THRESHOLD
 
     # 영상 URL을 입력받아 얼굴을 탐지하고 표정을 분석하여 결과를 반환
     # Process:
@@ -414,6 +500,16 @@ class FaceAnalyzer:
             debug_dir.mkdir(parents=True, exist_ok=True)
             raw_filename = f"{request_id}_{frame_idx}_00_raw.jpg"
             cv2.imwrite(str(debug_dir / raw_filename), frame_bgr)
+
+        # ★ 0단계: MobileCLIP으로 "진짜 강아지인지" 먼저 확인 ★
+        # → 강아지가 아니면 YOLO/EfficientNet을 실행할 필요 없이 바로 건너뜀
+        if self.dog_filter_enabled:
+            frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+            pil_image = Image.fromarray(frame_rgb)
+            if not self._is_real_dog(pil_image):
+                if DEBUG:
+                    logger.info(f"[{request_id}] Frame {frame_idx}: MobileCLIP - 강아지가 아닌 것으로 판별됨, 건너뜀")
+                return None
 
         # 1. 얼굴 탐지 (YOLO)
         yolo_results = self.detector(frame_bgr, verbose=False, device=TORCH_DEVICE)
