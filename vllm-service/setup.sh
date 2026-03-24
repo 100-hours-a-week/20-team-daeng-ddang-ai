@@ -13,7 +13,7 @@ source .venv/bin/activate
 
 echo "[3/3] 의존성 설치 중..."
 pip install --upgrade pip
-pip install "vllm>=0.8.0"
+pip install "vllm>=0.8.0" python-dotenv huggingface_hub
 
 echo ""
 echo "✅ 환경 설정 완료!"
