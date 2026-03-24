@@ -17,6 +17,7 @@ class VetChatbotCore:
         chroma_db_dir: str = "models/chroma_db",
         embedding_model_id: str = "jhgan/ko-sroberta-multitask",
         embedding_normalize: bool = True,
+        rag_enabled: bool = True,
         retrieval_k: int = 5,
         final_top_k: int = 3,
         rerank_enabled: bool = True,
@@ -36,6 +37,7 @@ class VetChatbotCore:
         self.chroma_db_dir = chroma_db_dir
         self.embedding_model_id = embedding_model_id
         self.embedding_normalize = embedding_normalize
+        self.rag_enabled = rag_enabled
         self.retrieval_k = max(1, retrieval_k)
         self.final_top_k = max(1, min(final_top_k, self.retrieval_k))
         self.rerank_enabled = rerank_enabled
@@ -55,6 +57,7 @@ class VetChatbotCore:
         self.revision_file = os.getenv("MODEL_REVISION_FILE", os.path.join(self.assets_local_dir, ".vet_chat_revision"))
 
         self.generation_client = None
+        self.vectorstore = None
         self.retriever = None
         self.reranker = None
 
@@ -149,12 +152,14 @@ class VetChatbotCore:
         needs_download = self.force_refresh_models
         target_revision = None
         reasons = []
+        allow_patterns = []
         chroma_dir_name = os.path.basename(os.path.normpath(self.chroma_db_dir)) or "chroma_db"
-        allow_patterns = [f"{chroma_dir_name}/*"]
+        if self.rag_enabled:
+            allow_patterns.append(f"{chroma_dir_name}/*")
 
         if self.force_refresh_models:
             reasons.append("FORCE_REFRESH_MODELS=true")
-        if not self._dir_has_files(self.chroma_db_dir):
+        if self.rag_enabled and not self._dir_has_files(self.chroma_db_dir):
             print(f"⚠️ Chroma DB not found at {self.chroma_db_dir}.")
             needs_download = True
             reasons.append("missing chroma_db")
@@ -231,48 +236,204 @@ class VetChatbotCore:
         else:
             raise ValueError(f"Unsupported llm backend: {self.llm_backend}")
 
-        print(
-            f"Loading Vector DB... (embedding={self.embedding_model_id}, normalize={self.embedding_normalize}, "
-            f"retrieval_k={self.retrieval_k}, final_top_k={self.final_top_k})"
-        )
-        embeddings = HuggingFaceEmbeddings(
-            model_name=self.embedding_model_id,
-            encode_kwargs={"normalize_embeddings": self.embedding_normalize},
-        )
-        vectorstore = Chroma(
-            persist_directory=self.chroma_db_dir, 
-            embedding_function=embeddings,
-            collection_name="vet_qa_collection"
-        )
-        # return_source_documents is automatically handled when we access metadata if we retrieve directly.
-        self.retriever = vectorstore.as_retriever(search_kwargs={"k": self.retrieval_k})
+        if self.rag_enabled:
+            print(
+                f"Loading Vector DB... (embedding={self.embedding_model_id}, normalize={self.embedding_normalize}, "
+                f"retrieval_k={self.retrieval_k}, final_top_k={self.final_top_k})"
+            )
+            embeddings = HuggingFaceEmbeddings(
+                model_name=self.embedding_model_id,
+                encode_kwargs={"normalize_embeddings": self.embedding_normalize},
+            )
+            vectorstore = Chroma(
+                persist_directory=self.chroma_db_dir, 
+                embedding_function=embeddings,
+                collection_name="vet_qa_collection"
+            )
+            self.vectorstore = vectorstore
+            self.retriever = vectorstore.as_retriever(search_kwargs={"k": self.retrieval_k})
 
-        if self.rerank_enabled:
-            try:
-                self.reranker = CrossEncoder(self.reranker_model_id)
-                print(f"✅ Reranker loaded: {self.reranker_model_id}")
-            except Exception as e:
-                self.reranker = None
-                print(f"⚠️ Failed to load reranker '{self.reranker_model_id}': {e}. Continue without reranking.")
+            if self.rerank_enabled:
+                try:
+                    self.reranker = CrossEncoder(self.reranker_model_id)
+                    print(f"✅ Reranker loaded: {self.reranker_model_id}")
+                except Exception as e:
+                    self.reranker = None
+                    print(f"⚠️ Failed to load reranker '{self.reranker_model_id}': {e}. Continue without reranking.")
+        else:
+            self.vectorstore = None
+            self.retriever = None
+            self.reranker = None
+            print("ℹ️ RAG disabled. Skipping Vector DB and reranker initialization.")
         print("✅ Core initialization complete.")
+
+    def _retrieve_docs(self, retrieval_source: str, image_priority_terms: List[str]) -> List[object]:
+        if self.retriever is None:
+            return []
+
+        queries: List[str] = [retrieval_source]
+        for term in (image_priority_terms or [])[:3]:
+            term = (term or "").strip()
+            if not term:
+                continue
+            queries.append(f"{term} 반려견 안과 질환")
+
+        seen_keys: set[str] = set()
+        merged_docs: List[object] = []
+        for raw_query in queries:
+            retrieval_query = self._prepare_query_text(raw_query, self.embedding_model_id)
+            if self.vectorstore is not None and hasattr(self.vectorstore, "similarity_search"):
+                per_query_k = max(self.retrieval_k * 3, 10)
+                docs = self.vectorstore.similarity_search(retrieval_query, k=per_query_k)
+            else:
+                docs = self.retriever.invoke(retrieval_query)
+            for doc in docs:
+                doc_id = str(doc.metadata.get("id", "")).strip()
+                key = doc_id or getattr(doc, "page_content", "")
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                merged_docs.append(doc)
+        return merged_docs
 
     def _rerank_docs(self, message: str, docs) -> List[Tuple[object, float]]:
         if not docs:
             return []
         if not self.rerank_enabled or self.reranker is None:
-            return [(doc, 1.0) for doc in docs[: self.final_top_k]]
+            return [(doc, 1.0) for doc in docs]
 
         pairs = [(message, doc.page_content) for doc in docs]
         try:
             scores = self.reranker.predict(pairs, show_progress_bar=False)
             doc_scores = list(zip(docs, [float(s) for s in scores]))
             doc_scores.sort(key=lambda x: x[1], reverse=True)
-            return doc_scores[: self.final_top_k]
+            return doc_scores
         except Exception as e:
             print(f"⚠️ Rerank failed: {e}. Fallback to retrieval order.")
-            return [(doc, 1.0) for doc in docs[: self.final_top_k]]
+            return [(doc, 1.0) for doc in docs]
 
-    def generate_answer(self, message: str, user_context: dict, history: list):
+    @staticmethod
+    def _prioritize_docs_by_terms(doc_scores: List[Tuple[object, float]], priority_terms: List[str]) -> List[Tuple[object, float]]:
+        if not doc_scores or not priority_terms:
+            return doc_scores
+
+        normalized_terms = [term.strip().lower() for term in priority_terms if term and term.strip()]
+        if not normalized_terms:
+            return doc_scores
+
+        boosted: List[Tuple[object, float, int]] = []
+        for doc, score in doc_scores:
+            title = str(doc.metadata.get("title", "")).lower()
+            content = str(getattr(doc, "page_content", "")).lower()
+            match_count = sum(1 for term in normalized_terms if term in title or term in content)
+            boosted.append((doc, score, match_count))
+
+        boosted.sort(key=lambda item: (item[2], item[1]), reverse=True)
+        return [(doc, score) for doc, score, _ in boosted]
+
+    @staticmethod
+    def _select_diverse_docs(
+        doc_scores: List[Tuple[object, float]],
+        priority_terms: List[str],
+        limit: int,
+    ) -> List[Tuple[object, float]]:
+        if not doc_scores:
+            return []
+
+        normalized_terms = [term.strip().lower() for term in priority_terms if term and term.strip()]
+        selected: List[Tuple[object, float]] = []
+        selected_keys: set[str] = set()
+
+        def doc_key(doc: object) -> str:
+            metadata = getattr(doc, "metadata", {}) or {}
+            return str(metadata.get("id", "")).strip() or str(getattr(doc, "page_content", ""))
+
+        def doc_text(doc: object) -> str:
+            metadata = getattr(doc, "metadata", {}) or {}
+            title = str(metadata.get("title", "")).lower()
+            content = str(getattr(doc, "page_content", "")).lower()
+            return f"{title}\n{content}"
+
+        for term in normalized_terms:
+            for doc, score in doc_scores:
+                key = doc_key(doc)
+                if key in selected_keys:
+                    continue
+                if term in doc_text(doc):
+                    selected.append((doc, score))
+                    selected_keys.add(key)
+                    break
+            if len(selected) >= limit:
+                return selected[:limit]
+
+        for doc, score in doc_scores:
+            key = doc_key(doc)
+            if key in selected_keys:
+                continue
+            selected.append((doc, score))
+            selected_keys.add(key)
+            if len(selected) >= limit:
+                break
+
+        return selected[:limit]
+
+    @staticmethod
+    def _sanitize_answer_text(text: str) -> str:
+        original = (text or "").strip()
+        cleaned = original
+        if not cleaned:
+            return cleaned
+
+        leak_markers = [
+            "여기需要保持中文回答",
+            "这里需要保持中文回答",
+            "请继续",
+            "中文回答",
+        ]
+        cut_index = len(cleaned)
+
+        for marker in leak_markers:
+            idx = cleaned.find(marker)
+            if idx >= 0:
+                cut_index = min(cut_index, idx)
+
+        broken_idx = cleaned.find("�")
+        if broken_idx >= 0:
+            cut_index = min(cut_index, broken_idx)
+
+        chinese_match = re.search(r"[\u4e00-\u9fff]{2,}", cleaned)
+        if chinese_match:
+            cut_index = min(cut_index, chinese_match.start())
+
+        cleaned = cleaned[:cut_index].rstrip()
+        if cut_index < len(original):
+            last_sentence_end = max(cleaned.rfind("."), cleaned.rfind("!"), cleaned.rfind("?"))
+            if last_sentence_end >= 0:
+                cleaned = cleaned[: last_sentence_end + 1]
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+        if not cleaned:
+            return "정확한 평가는 동물병원 안과 진료를 통해 확인하는 것이 좋습니다."
+
+        cleaned = re.sub(r"^\d+\.\s*", "", cleaned)
+
+        if cleaned[-1] not in ".!?다요":
+            cleaned = cleaned.rstrip(":;,") + "."
+
+        if "동물병원" not in cleaned and "수의사" not in cleaned:
+            cleaned += " 정확한 진단은 동물병원에서 확인하는 것이 좋습니다."
+
+        return cleaned
+
+    def generate_answer(
+        self,
+        message: str,
+        user_context: dict,
+        history: list,
+        image_analysis_note: str = "",
+        image_retrieval_hint: str = "",
+        image_priority_terms: List[str] | None = None,
+    ):
         """
         Generate a response based on RAG context, user history, and dog profile.
         
@@ -284,22 +445,31 @@ class VetChatbotCore:
         Returns:
             dict: { "answer": str, "citations": list of dicts }
         """
-        # 1. RAG 기반 문서 검색
-        retrieval_query = self._prepare_query_text(message, self.embedding_model_id)
-        docs = self.retriever.invoke(retrieval_query)
-        ranked_docs = self._rerank_docs(message, docs)
-        
         context_text = ""
         citations = []
-        for idx, (doc, score) in enumerate(ranked_docs):
-            cleaned_content = self._clean_context_text(doc.page_content)
-            context_text += f"[근거 자료 {idx+1}]\n{cleaned_content}\n\n"
-            citations.append({
-                "doc_id": doc.metadata.get("id", f"doc_{idx}"),
-                "title": doc.metadata.get("title", "수집된 수의학 지식"),
-                "score": round(float(score), 4),
-                "snippet": cleaned_content[:100] + "..."
-            })
+        if self.rag_enabled and self.retriever is not None:
+            retrieval_source = message
+            if image_retrieval_hint:
+                retrieval_source = f"{message}\n이미지 단서: {image_retrieval_hint}"
+
+            docs = self._retrieve_docs(retrieval_source, image_priority_terms or [])
+            ranked_docs = self._rerank_docs(retrieval_source, docs)
+            ranked_docs = self._prioritize_docs_by_terms(ranked_docs, image_priority_terms or [])
+            ranked_docs = self._select_diverse_docs(
+                ranked_docs,
+                image_priority_terms or [],
+                self.final_top_k,
+            )
+
+            for idx, (doc, score) in enumerate(ranked_docs):
+                cleaned_content = self._clean_context_text(doc.page_content)
+                context_text += f"[근거 자료 {idx+1}]\n{cleaned_content}\n\n"
+                citations.append({
+                    "doc_id": doc.metadata.get("id", f"doc_{idx}"),
+                    "title": doc.metadata.get("title", "수집된 수의학 지식"),
+                    "score": round(float(score), 4),
+                    "snippet": cleaned_content[:100] + "..."
+                })
 
         # 2. 강아지 프로필 컨텍스트 문자열 생성
         profile_str = ""
@@ -309,19 +479,59 @@ class VetChatbotCore:
             breed = user_context.get("breed", "알수없음")
             profile_str = f"- 견종: {breed}\n- 나이: {age}살\n- 체중: {weight}kg\n"
         
-        # 3. 고도화된 시스템 프롬프트 작성
-        # 답변의 톤앤매너, 환각 방지, 유저 컨텍스트를 종합적으로 지시합니다.
-        system_prompt = (
-            "당신은 따뜻하고 전문적인 수의학 AI 챗봇입니다.\n"
-            "아래 제공된 [환자 정보]와 [참고 문서]만을 바탕으로 사용자의 질문에 답변하세요.\n"
-            "답변은 핵심을 짚어 간결하고 친절한 한국어로 작성하며, 참고 문서에 없는 내용을 절대 지어내지 마세요.\n"
-            "응급 내원 권고는 호흡곤란, 반복 구토, 혈변/흑변, 의식 저하, 경련, 복부 팽만, 보행 불능, 심한 통증처럼 명확한 위험 신호가 참고 문서에 있을 때만 하세요.\n"
-            "그 외에는 집에서 관찰할 점과 일반 내원 또는 예약 내원 권고를 우선 제시하세요.\n"
-            "참고 문서에 근거가 약하면 단정적으로 말하지 말고 가능성을 나눠 설명하세요.\n"
-            "참고 문서의 제목, 섹션 헤더, 영어 문구를 답변 첫머리에 그대로 복사하지 마세요."
+        image_analysis_str = ""
+        if image_analysis_note:
+            image_analysis_str = f"[이미지 분석 보조 정보]\n{image_analysis_note}\n"
+
+        answer_format_str = (
+            "[답변 형식]\n"
+            "번호 목록 대신 자연스러운 1~2개 짧은 문단으로 답변하세요.\n"
+            "가장 가능성이 높은 질환과 다른 가능성을 1~2문장으로 먼저 요약하세요.\n"
+            "가능성이 있는 질환이 2개 이상이면 각 질환마다 왜 고려하는지 또는 대표 증상을 1문장씩 덧붙이세요.\n"
+            "설명은 짧고 자연스러운 한국어 문단으로 작성하고, 불필요한 장황함은 피하세요.\n"
+            "마지막에는 확진이 아니며 필요 시 동물병원 진료가 필요하다는 점을 1문장으로 안내하세요.\n"
         )
 
-        user_prompt = f"[환자 정보]\n{profile_str}\n[참고 문서]\n{context_text}\n[사용자 질문]\n{message}"
+        # 3. 고도화된 시스템 프롬프트 작성
+        # 답변의 톤앤매너, 환각 방지, 유저 컨텍스트를 종합적으로 지시합니다.
+        if self.rag_enabled:
+            system_prompt = (
+                "당신은 따뜻하고 전문적인 수의학 AI 챗봇입니다.\n"
+                "아래 제공된 [환자 정보], [이미지 분석 보조 정보], [참고 문서]만을 바탕으로 사용자의 질문에 답변하세요.\n"
+                "답변은 핵심을 짚어 간결하고 친절한 한국어로 작성하며, 참고 문서에 없는 내용을 절대 지어내지 마세요.\n"
+                "반드시 자연스러운 한국어로만 답변하고, 중국어·영어·일본어 등 다른 언어를 섞지 마세요.\n"
+                "응급 내원 권고는 호흡곤란, 반복 구토, 혈변/흑변, 의식 저하, 경련, 복부 팽만, 보행 불능, 심한 통증처럼 명확한 위험 신호가 참고 문서에 있을 때만 하세요.\n"
+                "그 외에는 집에서 관찰할 점과 일반 내원 또는 예약 내원 권고를 우선 제시하세요.\n"
+                "참고 문서에 근거가 약하면 단정적으로 말하지 말고 가능성을 나눠 설명하세요.\n"
+                "이미지 분석 결과가 있더라도 보조 참고 정보로만 활용하고 최종 진단처럼 단정하지 마세요.\n"
+                "참고 문서의 제목, 섹션 헤더, 영어 문구를 답변 첫머리에 그대로 복사하지 마세요.\n"
+                "가능성이 있는 질환이 여러 개면 각 질환에 대해 왜 고려하는지 또는 대표 증상을 짧게 설명하되, 참고 문서에 없는 세부사항은 덧붙이지 마세요."
+            )
+            user_prompt = (
+                f"[환자 정보]\n{profile_str}\n"
+                f"{image_analysis_str}"
+                f"{answer_format_str}"
+                f"[참고 문서]\n{context_text}\n"
+                f"[사용자 질문]\n{message}"
+            )
+        else:
+            system_prompt = (
+                "당신은 따뜻하고 전문적인 수의학 AI 챗봇입니다.\n"
+                "아래 제공된 [환자 정보]와 [이미지 분석 보조 정보]를 참고하여 사용자의 질문에 답변하세요.\n"
+                "답변은 핵심을 짚어 간결하고 친절한 한국어로 작성하세요.\n"
+                "반드시 자연스러운 한국어로만 답변하고, 중국어·영어·일본어 등 다른 언어를 섞지 마세요.\n"
+                "근거가 불충분한 내용은 단정적으로 말하지 말고 일반적인 가능성으로 설명하세요.\n"
+                "응급 내원 권고는 호흡곤란, 반복 구토, 혈변/흑변, 의식 저하, 경련, 복부 팽만, 보행 불능, 심한 통증처럼 명확한 위험 신호가 있을 때만 하세요.\n"
+                "그 외에는 집에서 관찰할 점과 일반 내원 또는 예약 내원 권고를 우선 제시하세요.\n"
+                "이미지 분석 결과가 있더라도 보조 참고 정보로만 활용하고 최종 진단처럼 단정하지 마세요.\n"
+                "가능성이 있는 질환이 여러 개면 각 질환에 대해 왜 고려하는지 또는 대표 증상을 짧게 설명하세요."
+            )
+            user_prompt = (
+                f"[환자 정보]\n{profile_str}\n"
+                f"{image_analysis_str}"
+                f"{answer_format_str}"
+                f"[사용자 질문]\n{message}"
+            )
 
         # 4. History 기반 대화 템플릿 구성
         messages = [{"role": "system", "content": system_prompt}]
@@ -335,7 +545,7 @@ class VetChatbotCore:
         # 5. 모델 추론
         if self.generation_client is None:
             raise RuntimeError("Generation client is not initialized.")
-        response_text = self.generation_client.generate(messages)
+        response_text = self._sanitize_answer_text(self.generation_client.generate(messages))
 
         return {
             "answer": response_text,

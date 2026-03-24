@@ -7,6 +7,7 @@ __pycache__/
 *.py[cod]
 *.so
 .Python
+.env
 env/
 venv/
 .venv/
@@ -29,6 +30,10 @@ test_data/
 runs/
 wandb/
 mlruns/
+
+# Service-local model caches
+multimodal-service/models/
+vllm-service/models/
 
 # IDE
 .idea/
