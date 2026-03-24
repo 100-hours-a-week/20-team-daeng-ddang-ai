@@ -9,6 +9,10 @@ import uuid
 import requests
 import tempfile
 import time
+import subprocess
+from zoneinfo import ZoneInfo
+
+SEOUL_TZ = ZoneInfo("Asia/Seoul")
 
 class Config:
     # 런타임 및 안전장치 설정
@@ -86,15 +90,47 @@ class DogHealthAnalyzer:
             'tail': (0, 255, 0), 'head': (0, 255, 255)
         }
 
+    def _convert_overlay_to_web_mp4(self, temp_overlay_path, overlay_path):
+        # iPhone Safari 호환성을 위해 H.264 + yuv420p + faststart로 강제 변환합니다.
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            temp_overlay_path,
+            "-an",
+            "-vf",
+            "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            "-profile:v",
+            "baseline",
+            "-level",
+            "3.0",
+            overlay_path,
+        ]
+        subprocess.run(
+            ffmpeg_cmd,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
     # 1. 메인 분석 파이프라인
     def analyze_video(self, video_source, dog_id=123, analysis_id=None):
-        start_time = time.time()
+        start_time = time.perf_counter()
         if analysis_id is None:
             analysis_id = str(uuid.uuid4())
         
         print(f"Starting Analysis [{analysis_id}] (Debug={Config.DEBUG_MODE})...")
 
+        stage_timings_ms = {}
+        input_start = time.perf_counter()
         video_path, temp_file = self._resolve_video_source(video_source)
+        stage_timings_ms["input_prepare"] = int((time.perf_counter() - input_start) * 1000)
         if not video_path:
             return self._error(analysis_id, dog_id, "VIDEO_DOWNLOAD_ERROR")
 
@@ -109,7 +145,12 @@ class DogHealthAnalyzer:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         video_duration = total_frames / fps if fps > 0 else 0
 
-        overlay_filename = f"overlay_{analysis_id}.mp4"
+        print(
+            f"Input Video Stats [{analysis_id}] fps={fps:.2f} total_frames={total_frames} "
+            f"resolution={width}x{height} duration_sec={video_duration:.2f}"
+        )
+
+        overlay_filename = f"overlay_{uuid.uuid4().hex}.mp4"
         overlay_path = os.path.join(self.output_dir, overlay_filename)
         temp_overlay_path = os.path.join(self.output_dir, f"temp_{overlay_filename}")
         
@@ -130,6 +171,7 @@ class DogHealthAnalyzer:
         valid_frames = 0
         smoothed_kpts = None
 
+        frame_loop_start = time.perf_counter()
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret: break
@@ -184,21 +226,20 @@ class DogHealthAnalyzer:
         cap.release()
         out.release()
         self._cleanup(temp_file)
+        stage_timings_ms["frame_loop"] = int((time.perf_counter() - frame_loop_start) * 1000)
         
-        # 웹 브라우저 호환성을 위해 mp4v 포맷을 h264(libx264)로 강제 변환
-        import subprocess
+        # 웹 브라우저 호환성을 위해 mp4v 포맷을 Safari 친화적인 H.264 MP4로 강제 변환
+        convert_start = time.perf_counter()
         try:
-            print(f"Converting video to Web-Compatible H.264 format via FFmpeg...")
-            subprocess.run(
-                ["ffmpeg", "-y", "-i", temp_overlay_path, "-vcodec", "libx264", overlay_path], 
-                check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
+            print("Converting video to Safari-compatible H.264 MP4 via FFmpeg...")
+            self._convert_overlay_to_web_mp4(temp_overlay_path, overlay_path)
             if os.path.exists(temp_overlay_path):
                 os.remove(temp_overlay_path)
         except Exception as e:
             print(f"⚠️ FFmpeg H.264 conversion failed: {e}. Falling back to standard mp4v.")
             if os.path.exists(temp_overlay_path):
                 os.rename(temp_overlay_path, overlay_path)
+        stage_timings_ms["overlay_convert"] = int((time.perf_counter() - convert_start) * 1000)
         
         # Check if dog was detected
         if valid_frames < 10:
@@ -206,10 +247,12 @@ class DogHealthAnalyzer:
              if os.path.exists(overlay_path): os.remove(overlay_path)
              return self._error(analysis_id, dog_id, "DOG_NOT_DETECTED")
 
-        process_time_ms = int((time.time() - start_time) * 1000)
+        metrics_start = time.perf_counter()
 
         try:
             report = self._analyze_metrics(ts, fps, analysis_id, dog_id, overlay_filename)
+            stage_timings_ms["metrics"] = int((time.perf_counter() - metrics_start) * 1000)
+            process_time_ms = int((time.perf_counter() - start_time) * 1000)
             
             # Add processing stats to ROOT level only in debug mode
             if Config.DEBUG_MODE:
@@ -218,13 +261,26 @@ class DogHealthAnalyzer:
                     "video_duration_sec": float(video_duration),
                     "frames_sampled": frame_idx,
                     "valid_frames": valid_frames,
-                    "fps_used": int(fps)
+                    "fps_used": int(fps),
+                    "source_resolution": {"width": width, "height": height},
+                    "stage_timings_ms": stage_timings_ms,
                 }
             
-            output_json = os.path.join(self.output_dir, f"analysis_{analysis_id}.json")
-            with open(output_json, "w") as f:
-                json.dump(report, f, indent=4, ensure_ascii=False)
-            print(f"Analysis Complete! Report: {output_json}")
+            print(
+                f"Analysis Timing [{analysis_id}] total_ms={process_time_ms} "
+                f"input_prepare_ms={stage_timings_ms['input_prepare']} "
+                f"frame_loop_ms={stage_timings_ms['frame_loop']} "
+                f"overlay_convert_ms={stage_timings_ms['overlay_convert']} "
+                f"metrics_ms={stage_timings_ms['metrics']} "
+                f"frames_sampled={frame_idx} valid_frames={valid_frames}"
+            )
+            # Local debug/result JSON dumps are intentionally disabled.
+            # Infra environments may enable DEBUG while forbidding local filesystem writes.
+            # output_json = os.path.join(self.output_dir, f"analysis_{analysis_id}.json")
+            # with open(output_json, "w") as f:
+            #     json.dump(report, f, indent=4, ensure_ascii=False)
+            # print(f"Analysis Complete! Report: {output_json}")
+            print("Analysis Complete! Local report file dump is disabled.")
             return report
         except Exception as e:
             import traceback
@@ -393,7 +449,7 @@ class DogHealthAnalyzer:
         return {
             "analysis_id": aid,
             "dog_id": int(did), # Force int as per user schema
-            "analyze_at": datetime.now().isoformat(),
+            "analyze_at": datetime.now(SEOUL_TZ).isoformat(),
             "result": {
                 "overall_score": overall, # Included as per latest request
                 "overall_risk_level": patella_lvl, 
@@ -477,7 +533,7 @@ class DogHealthAnalyzer:
     
     def _error(self, aid, did, code):
         """표준 에러 응답 객체 생성"""
-        return {"analysis_id": aid, "dog_id": int(did), "analyze_at": datetime.now().isoformat(), "error_code": code}
+        return {"analysis_id": aid, "dog_id": int(did), "analyze_at": datetime.now(SEOUL_TZ).isoformat(), "error_code": code}
     
     # 수학/통계 연산 보조 함수
     def _naninterp(self, x):

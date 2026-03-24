@@ -1,6 +1,8 @@
 # app/routers/mission_router.py
 from __future__ import annotations
-from fastapi import APIRouter, HTTPException
+import logging
+
+from fastapi import APIRouter, HTTPException, Request
 from app.schemas.mission_schema import (
     MissionAnalysisData, 
     MissionAnalysisRequest, 
@@ -10,6 +12,7 @@ from app.schemas.mission_schema import (
 from app.services.mission_service import analyze_sync, analyze_async, now_iso
 
 router = APIRouter(prefix = "/api/missions", tags = ["mission"])
+logger = logging.getLogger(__name__)
 
 # 미션 판정 엔드포인트 – 비동기 버전 (기본)
 @router.post(
@@ -22,8 +25,16 @@ router = APIRouter(prefix = "/api/missions", tags = ["mission"])
 )
 async def analyze_missions_judge(
     req: MissionAnalysisRequest,
+    request: Request,
 ):
     try:
+        logger.info(
+            "[MISSION_RECEIVED] request_id=%s analysis_id=%s walk_id=%s mission_count=%s",
+            getattr(request.state, "request_id", "-"),
+            req.analysis_id,
+            req.walk_id,
+            len(req.missions),
+        )
         # 비동기 방식으로 모든 미션을 병렬 처리
         results = await analyze_async(req.missions)
         

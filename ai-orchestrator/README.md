@@ -19,6 +19,7 @@
 - 타임아웃
   - `FACE_HTTP_TIMEOUT_SECONDS`
   - `HEALTHCARE_HTTP_TIMEOUT_SECONDS`
+    - 기본값 `240`초. healthcare는 영상 다운로드, 추론, 오버레이 생성, 업로드까지 포함하므로 다른 기능보다 길게 잡는 편이 안전합니다.
   - `CHATBOT_HTTP_TIMEOUT_SECONDS`
 - 백프레셔(과부하 제어)
   - `*_MAX_CONCURRENCY`: 기능별 동시 처리 슬롯 수

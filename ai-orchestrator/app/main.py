@@ -1,11 +1,13 @@
 # app/main.py
-import os, hashlib, logging
+import os, hashlib, logging, uuid
+from time import perf_counter
 from dotenv import load_dotenv
 
 # 환경 변수 로드 (.env 파일에서 읽어옴) -> 가장 먼저 실행되어야 함
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from starlette.responses import Response
 from app.routers.mission_router import router as mission_router
 from app.routers.face_router import router as face_router
 from app.routers.healthcare_router import router as healthcare_router
@@ -21,6 +23,55 @@ logger = logging.getLogger(__name__)
 
 # FastAPI 앱 초기화 (타이틀과 버전 설정)
 app = FastAPI(title="DaengDdang AI Orchestrator", version="0.1.0")
+
+
+@app.middleware("http")
+async def log_request_lifecycle(request: Request, call_next) -> Response:
+    request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    request.state.request_id = request_id
+
+    path = request.url.path
+    client_host = request.client.host if request.client else "-"
+    content_length = request.headers.get("content-length", "-")
+
+    if path != "/health":
+        logger.info(
+            "[REQUEST_RECEIVED] request_id=%s method=%s path=%s client=%s content_length=%s",
+            request_id,
+            request.method,
+            path,
+            client_host,
+            content_length,
+        )
+
+    started_at = perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = (perf_counter() - started_at) * 1000
+        logger.exception(
+            "[REQUEST_FAILED] request_id=%s method=%s path=%s duration_ms=%.2f",
+            request_id,
+            request.method,
+            path,
+            duration_ms,
+        )
+        raise
+
+    response.headers["X-Request-ID"] = request_id
+
+    if path != "/health":
+        duration_ms = (perf_counter() - started_at) * 1000
+        logger.info(
+            "[REQUEST_COMPLETED] request_id=%s method=%s path=%s status_code=%s duration_ms=%.2f",
+            request_id,
+            request.method,
+            path,
+            response.status_code,
+            duration_ms,
+        )
+
+    return response
 
 # 헬스 체크 엔드포인트 (LB나 모니터링 시스템에서 호출)
 @app.get("/health")

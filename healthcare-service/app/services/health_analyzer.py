@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 import uuid
 from pathlib import Path
 from typing import Callable, Optional
+from zoneinfo import ZoneInfo
 
 import boto3
 from botocore.config import Config as BotoConfig
@@ -36,6 +38,11 @@ if os.getenv("DEBUG_MODE") is None:
 from scripts.analyze_health import DogHealthAnalyzer  # type: ignore
 
 logger = logging.getLogger(__name__)
+SEOUL_TZ = ZoneInfo("Asia/Seoul")
+OVERLAY_UPLOAD_ARGS = {
+    "ContentType": "video/mp4",
+    "ContentDisposition": "inline",
+}
 
 
 class HealthAnalyzerService:
@@ -60,6 +67,14 @@ class HealthAnalyzerService:
             )
         else:
             logger.warning("S3_BUCKET_NAME not set. Overlay videos will not be uploaded.")
+
+    @staticmethod
+    def _discard_local_file(local_path: Path) -> None:
+        try:
+            if local_path.exists():
+                local_path.unlink()
+        except OSError:
+            pass
 
     def _emit_status(
         self,
@@ -98,6 +113,7 @@ class HealthAnalyzerService:
     ) -> HealthAnalyzeResponse:
         analysis_id = req.analysis_id or str(uuid.uuid4())
         dog_id = int(req.dog_id) if req.dog_id is not None else 123
+        request_start = time.perf_counter()
 
         logger.info("Healthcare analyze start id=%s dog_id=%s debug=%s", analysis_id, dog_id, DEBUG_MODE)
         if emit_queued_event:
@@ -111,6 +127,7 @@ class HealthAnalyzerService:
             )
 
         try:
+            analyze_core_start = time.perf_counter()
             self._emit_status(
                 analysis_id,
                 JobStatus.PREPARING_INPUT,
@@ -130,6 +147,8 @@ class HealthAnalyzerService:
                 dog_id=dog_id,
                 analysis_id=analysis_id,
             )
+            analyze_core_ms = int((time.perf_counter() - analyze_core_start) * 1000)
+            logger.info("Healthcare core analysis finished id=%s core_ms=%s", analysis_id, analyze_core_ms)
         except Exception as exc:
             self._emit_status(
                 analysis_id,
@@ -150,14 +169,21 @@ class HealthAnalyzerService:
         )
 
         # Upload overlay artifact to S3 if available
-        artifacts = report.get("artifacts") or {}
+        artifacts = dict(report.get("artifacts") or {})
         overlay_name = artifacts.get("keypoint_overlay_video_url")
         if overlay_name:
             local_overlay = Path(self.output_dir) / overlay_name
+            upload_start = time.perf_counter()
             uploaded_url = self._upload_overlay(local_overlay, analysis_id)
+            upload_ms = int((time.perf_counter() - upload_start) * 1000)
+            logger.info("Healthcare overlay upload finished id=%s upload_ms=%s", analysis_id, upload_ms)
             if uploaded_url:
                 artifacts["keypoint_overlay_video_url"] = uploaded_url
-                report["artifacts"] = artifacts
+            else:
+                artifacts["keypoint_overlay_video_url"] = None
+                if not report.get("error_code"):
+                    report["error_code"] = "OVERLAY_UPLOAD_FAILED"
+            report["artifacts"] = artifacts
 
         response = HealthAnalyzeResponse.model_validate(report)
         self._emit_status(
@@ -167,10 +193,15 @@ class HealthAnalyzerService:
             progress=100,
             status_hook=status_hook,
         )
+        total_ms = int((time.perf_counter() - request_start) * 1000)
+        logger.info("Healthcare analyze done id=%s total_ms=%s", analysis_id, total_ms)
         return response
 
     def _upload_overlay(self, local_path: Path, analysis_id: str) -> Optional[str]:
         if not self.s3_client or not S3_BUCKET_NAME:
+            logger.warning("S3 upload unavailable. Missing client or bucket. analysis_id=%s", analysis_id)
+            # S3 업로드를 쓰지 않는 환경에서도 오버레이 영상이 로컬에 남지 않게 바로 정리합니다.
+            self._discard_local_file(local_path)
             return None
 
         if not local_path.exists():
@@ -179,12 +210,17 @@ class HealthAnalyzerService:
 
         # Create a time-based folder structure: S3_PREFIX/YYYY/MM/DD/filename
         from datetime import datetime
-        now = datetime.now()
+        now = datetime.now(SEOUL_TZ)
         year_month_day_path = f"{now.strftime('%Y')}/{now.strftime('%m')}/{now.strftime('%d')}"
         s3_key = f"{S3_PREFIX.rstrip('/')}/{year_month_day_path}/{local_path.name}"
         
         try:
-            self.s3_client.upload_file(str(local_path), S3_BUCKET_NAME, s3_key)
+            self.s3_client.upload_file(
+                str(local_path),
+                S3_BUCKET_NAME,
+                s3_key,
+                ExtraArgs=OVERLAY_UPLOAD_ARGS,
+            )
             url = f"https://{S3_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
             logger.info("Uploaded overlay to S3: %s", url)
             return url
@@ -192,10 +228,8 @@ class HealthAnalyzerService:
             logger.error("Failed to upload overlay to S3: %s", e)
             return None
         finally:
-            try:
-                local_path.unlink()
-            except OSError:
-                pass
+            # 업로드 성공/실패와 무관하게 로컬 오버레이 파일은 남기지 않습니다.
+            self._discard_local_file(local_path)
 
     def _resolve_model_path(self) -> str:
         # If local path exists, use it

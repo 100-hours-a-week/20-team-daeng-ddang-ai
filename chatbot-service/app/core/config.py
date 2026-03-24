@@ -3,7 +3,8 @@ import os
 from dotenv import load_dotenv
 
 # Load .env for local/service runtime.
-load_dotenv()
+# In local dev, prefer values from the service's .env over previously exported shell vars.
+load_dotenv(override=True)
 
 # 디버그 모드
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
@@ -21,6 +22,7 @@ VLLM_HTTP_TIMEOUT_SECONDS = float(os.getenv("VLLM_HTTP_TIMEOUT_SECONDS", "120"))
 # 임베딩/검색 설정
 EMBEDDING_MODEL_ID = os.getenv("EMBEDDING_MODEL_ID", "jhgan/ko-sroberta-multitask")
 EMBEDDING_NORMALIZE = os.getenv("EMBEDDING_NORMALIZE", "true").lower() in {"1", "true", "yes", "on"}
+RAG_ENABLED = os.getenv("RAG_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
 RAG_RETRIEVAL_K = int(os.getenv("RAG_RETRIEVAL_K", "5"))
 RAG_FINAL_TOP_K = int(os.getenv("RAG_FINAL_TOP_K", "3"))
 RAG_RERANK_ENABLED = os.getenv("RAG_RERANK_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
@@ -35,3 +37,8 @@ GEN_REPETITION_PENALTY = float(os.getenv("GEN_REPETITION_PENALTY", "1.08"))
 # 서버 설정
 PORT = int(os.getenv("PORT", 8300))
 MODEL_UPDATE_CHECK_INTERVAL_SECONDS = int(os.getenv("MODEL_UPDATE_CHECK_INTERVAL_SECONDS", "86400"))
+
+# Multimodal image analysis
+MULTIMODAL_ENABLED = os.getenv("MULTIMODAL_ENABLED", "true").lower() in {"1", "true", "yes", "on"}
+MULTIMODAL_SERVICE_URL = os.getenv("MULTIMODAL_SERVICE_URL", "http://localhost:8500").rstrip("/")
+MULTIMODAL_HTTP_TIMEOUT_SECONDS = float(os.getenv("MULTIMODAL_HTTP_TIMEOUT_SECONDS", "20"))

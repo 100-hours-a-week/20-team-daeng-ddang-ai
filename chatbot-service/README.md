@@ -55,6 +55,7 @@ python run.py
 | `VLLM_HTTP_TIMEOUT_SECONDS` | `120` | vLLM 요청 타임아웃 |
 | `EMBEDDING_MODEL_ID` | `jhgan/ko-sroberta-multitask` | 질의 임베딩 모델 ID |
 | `EMBEDDING_NORMALIZE` | `true` | 임베딩 L2 정규화 여부 |
+| `RAG_ENABLED` | `true` | `false`면 Vector DB 검색 없이 순수 LLM 답변만 생성 |
 | `RAG_RETRIEVAL_K` | `5` | 1차 검색 문서 수 |
 | `RAG_FINAL_TOP_K` | `3` | 리랭크 후 최종 컨텍스트 문서 수 |
 | `RAG_RERANK_ENABLED` | `true` | CrossEncoder 리랭크 사용 여부 |
@@ -72,6 +73,7 @@ python run.py
 | `HUGGING_FACE_HUB_TOKEN` | 없음 | HF 자산 다운로드/리비전 조회 토큰 |
 
 `EMBEDDING_MODEL_ID` 또는 `EMBEDDING_NORMALIZE`를 변경하면 기존 `models/chroma_db` 인덱스와 벡터 공간이 달라질 수 있습니다. 이 경우 인덱스를 동일 설정으로 재구축하는 것을 권장합니다.
+`RAG_ENABLED=false`로 실행하면 citation 없이 순수 생성 답변만 반환하므로, RAG 도입 전후 비교 실험에 활용할 수 있습니다.
 
 ## 모델 업데이트 동작
 - 시작 시 자산 존재 여부와 HF revision을 확인해 필요한 경우만 다운로드합니다.
