@@ -1,9 +1,4 @@
-# Chatbot Service Dockerfile
-FROM python:3.11-slim
-
-# NVIDIA GPU/CUDA 지원을 위한 환경 변수 (LLM GPU 가속 시 필수)
-ENV NVIDIA_VISIBLE_DEVICES=all
-ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+FROM python:3.10-slim
 
 WORKDIR /app
 
@@ -11,32 +6,25 @@ WORKDIR /app
 RUN addgroup --system app \
     && adduser --system --ingroup app --home /app app
 
-# LLM 구동 시 시스템에서 종종 필요한 기본 C/C++ 런타임 설치 지원
+# Build dependencies for some pip packages
 RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies (GPU용 PyTorch가 우선 설치되도록 .txt내용이 수정됨)
+# Install python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 RUN mkdir -p /app/models \
     && chown -R app:app /app
 
-# models/ 디렉토리는 별도 볼륨 마운트 또는 HuggingFace Hub에서 다운로드
-# (lora-qwen-7b-final, chroma_db 포함)
-VOLUME ["/app/models"]
-
-# Expose port (default 8300)
 EXPOSE 8300
 
-USER app
-
-# Container-level health check
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8300/health', timeout=3)"
 
-# Command to run the application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8300"]
+# 시작 시 볼륨 권한 설정 후 app 유저로 전환하여 실행
+CMD chown -R app:app /app/models && exec su -s /bin/sh app -c "uvicorn app.main:app --host 0.0.0.0 --port 8300"

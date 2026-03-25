@@ -184,19 +184,23 @@ class DogHealthAnalyzer:
         cap.release()
         out.release()
         self._cleanup(temp_file)
-        
+
         # 웹 브라우저 호환성을 위해 mp4v 포맷을 h264(libx264)로 강제 변환
         import subprocess
         try:
-            print(f"Converting video to Web-Compatible H.264 format via FFmpeg...")
-            subprocess.run(
-                ["ffmpeg", "-y", "-i", temp_overlay_path, "-vcodec", "libx264", overlay_path], 
-                check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            if not os.path.exists(temp_overlay_path):
+                print(f"⚠️ temp overlay file not found: {temp_overlay_path} (cwd={os.getcwd()})")
+                raise FileNotFoundError(f"temp overlay not found: {temp_overlay_path}")
+            print(f"Converting video to Web-Compatible H.264 format via FFmpeg... (file size: {os.path.getsize(temp_overlay_path)} bytes)")
+            result = subprocess.run(
+                ["ffmpeg", "-y", "-i", temp_overlay_path, "-vcodec", "libx264", overlay_path],
+                check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
             if os.path.exists(temp_overlay_path):
                 os.remove(temp_overlay_path)
         except Exception as e:
-            print(f"⚠️ FFmpeg H.264 conversion failed: {e}. Falling back to standard mp4v.")
+            stderr_msg = e.stderr.decode() if hasattr(e, 'stderr') and e.stderr else str(e)
+            print(f"⚠️ FFmpeg H.264 conversion failed: {stderr_msg}. Falling back to standard mp4v.")
             if os.path.exists(temp_overlay_path):
                 os.rename(temp_overlay_path, overlay_path)
         

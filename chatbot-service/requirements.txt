@@ -5,9 +5,9 @@ python-dotenv==1.2.1
 requests==2.32.5
 
 # ================================
-# LLM/RAG AI 의존성 (GPU 클라우드 T4/L4 호환)
+# LLM/RAG AI 의존성 (CPU only — LLM 추론은 vllm-service에 위임)
 # ================================
---extra-index-url https://download.pytorch.org/whl/cu121
+--extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.5.1
 torchvision==0.20.1
 

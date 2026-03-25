@@ -1,4 +1,7 @@
 # Root .gitignore to exclude global artifacts
+.env
+.env.*
+!.env.example
 *.pdf
 .DS_Store
 

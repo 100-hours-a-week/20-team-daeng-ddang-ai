@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  healthcare-service:
+    image: daengmap/healthcare-ai:latest
+    container_name: healthcare-service
+    restart: unless-stopped
+    ports:
+      - "8200:8200"
+    env_file:
+      - .env
+    volumes:
+      - healthcare-models:/app/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  healthcare-models:

@@ -1,0 +1,63 @@
+services:
+  vllm-service:
+    image: vllm/vllm-openai:latest
+    container_name: vllm-service
+    restart: unless-stopped
+    ports:
+      - "8400:8400"
+    env_file:
+      - .env.vllm
+    volumes:
+      - chatbot-models:/models
+    command:
+      - --model
+      - ${VLLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      - --host
+      - ${VLLM_HOST:-0.0.0.0}
+      - --port
+      - ${VLLM_PORT:-8400}
+      - --gpu-memory-utilization
+      - ${VLLM_GPU_MEMORY_UTILIZATION:-0.9}
+      - --max-model-len
+      - ${VLLM_MAX_MODEL_LEN:-4096}
+      - --tensor-parallel-size
+      - ${VLLM_TENSOR_PARALLEL_SIZE:-1}
+      - --dtype
+      - ${VLLM_DTYPE:-auto}
+    ipc: host
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8400/health', timeout=3)\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 600s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  chatbot-service:
+    image: daengmap/chatbot-ai:latest
+    container_name: chatbot-service
+    restart: unless-stopped
+    ports:
+      - "8300:8300"
+    env_file:
+      - .env
+    environment:
+      - VLLM_BASE_URL=http://vllm-service:8400
+    volumes:
+      - chatbot-models:/app/models
+    depends_on:
+      vllm-service:
+        condition: service_healthy
+
+volumes:
+  chatbot-models:

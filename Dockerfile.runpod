@@ -1,0 +1,51 @@
+# =============================================================
+# RunPod 통합 Dockerfile: vllm-service + chatbot-service + multimodal-service
+# Base: vllm/vllm-openai (CUDA + Python 포함)
+# =============================================================
+FROM vllm/vllm-openai:latest
+
+USER root
+
+# supervisord 설치
+RUN pip install --no-cache-dir supervisor
+
+# ----- chatbot-service 의존성 설치 -----
+COPY chatbot-service/requirements.txt /tmp/chatbot-requirements.txt
+
+# vllm 이미지에 이미 설치된 패키지(torch, transformers, huggingface_hub, accelerate 등)는 제외
+# 버전 충돌로 vllm이 깨지는 것을 방지
+RUN grep -v -E '^(torch==|torchvision==|--extra-index-url|transformers|huggingface_hub|accelerate)' /tmp/chatbot-requirements.txt > /tmp/chatbot-filtered.txt && \
+    pip install --no-cache-dir -r /tmp/chatbot-filtered.txt && \
+    rm /tmp/chatbot-requirements.txt /tmp/chatbot-filtered.txt
+
+# ----- vllm-service 런처 복사 (LoRA 다운로드 + 실행 로직) -----
+COPY vllm-service/run.py /vllm-service/run.py
+RUN pip install --no-cache-dir python-dotenv
+
+# ----- multimodal-service 의존성 설치 -----
+COPY multimodal-service/requirements.txt /tmp/multimodal-requirements.txt
+
+RUN grep -v -E '^(torch==|torchvision==|--extra-index-url|huggingface_hub)' /tmp/multimodal-requirements.txt > /tmp/multimodal-filtered.txt && \
+    pip install --no-cache-dir -r /tmp/multimodal-filtered.txt && \
+    rm /tmp/multimodal-requirements.txt /tmp/multimodal-filtered.txt
+
+# ----- chatbot-service 코드 복사 -----
+COPY chatbot-service/ /chatbot-service/
+RUN mkdir -p /chatbot-service/models
+
+# ----- multimodal-service 코드 복사 -----
+COPY multimodal-service/ /multimodal-service/
+RUN mkdir -p /multimodal-service/models
+
+# ----- supervisord 설정 -----
+COPY supervisord.conf /etc/supervisord.conf
+
+# ----- 시작 스크립트 -----
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+# 포트 노출: vllm(8400) + chatbot(8300) + multimodal(8500)
+EXPOSE 8300 8400 8500
+
+ENTRYPOINT []
+CMD ["/start.sh"]

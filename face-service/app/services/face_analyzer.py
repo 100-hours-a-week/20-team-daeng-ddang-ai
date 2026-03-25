@@ -494,13 +494,6 @@ class FaceAnalyzer:
 
     # 단일 프레임 이미지에서 가장 신뢰도 높은 얼굴을 찾아 감정을 분석
     def _analyze_frame(self, frame_bgr: np.ndarray, request_id: str, frame_idx: int) -> Optional[Dict[str, Any]]:
-        # Debug: Save Raw Frame (Only if DEBUG is On)
-        if DEBUG:
-            debug_dir = Path("../ai-orchestrator/testing_dev/debug_crops")
-            debug_dir.mkdir(parents=True, exist_ok=True)
-            raw_filename = f"{request_id}_{frame_idx}_00_raw.jpg"
-            cv2.imwrite(str(debug_dir / raw_filename), frame_bgr)
-
         # ★ 0단계: MobileCLIP으로 "진짜 강아지인지" 먼저 확인 ★
         # → 강아지가 아니면 YOLO/EfficientNet을 실행할 필요 없이 바로 건너뜀
         if self.dog_filter_enabled:
@@ -558,14 +551,8 @@ class FaceAnalyzer:
         FACE_PAD_RATIO = 0.20
         pw, ph = int(w * FACE_PAD_RATIO), int(h * FACE_PAD_RATIO)
         
-        # Debug: Save BBox Frame & Log Confidence
         if DEBUG:
             logger.info(f"[{request_id}] Frame {frame_idx}: Detected Dog with confidence {max_conf:.2f}")
-            bbox_frame = frame_bgr.copy()
-            cv2.rectangle(bbox_frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-            cv2.putText(bbox_frame, f"Dog {max_conf:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 255), 2)
-            bbox_filename = f"{request_id}_{frame_idx}_01_bbox.jpg"
-            cv2.imwrite(str(debug_dir / bbox_filename), bbox_frame)
         
         # 패딩 적용
         x1 = max(0, x1 - pw)
@@ -580,10 +567,6 @@ class FaceAnalyzer:
         # BGR -> RGB 변환
         crop_rgb = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB)
         
-        if DEBUG:
-            crop_filename = f"{request_id}_{frame_idx}_02_crop.jpg"
-            cv2.imwrite(str(debug_dir / crop_filename), crop_bgr) 
-            
         pil_img = Image.fromarray(crop_rgb)
         
         # Transform 적용 및 Batch 차원 추가

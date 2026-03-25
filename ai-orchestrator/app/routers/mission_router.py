@@ -1,19 +1,21 @@
 # app/routers/mission_router.py
 from __future__ import annotations
+import logging
 from fastapi import APIRouter, HTTPException
 from app.schemas.mission_schema import (
-    MissionAnalysisData, 
-    MissionAnalysisRequest, 
-    MissionErrorResponse, 
+    MissionAnalysisData,
+    MissionAnalysisRequest,
+    MissionErrorResponse,
     MissionErrorDetail
 )
 from app.services.mission_service import analyze_sync, analyze_async, now_iso
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix = "/api/missions", tags = ["mission"])
 
 # 미션 판정 엔드포인트 – 비동기 버전 (기본)
 @router.post(
-    "/judge", 
+    "/judge",
     response_model=MissionAnalysisData,
     responses={
         400: {"model": MissionErrorResponse, "description": "Invalid Request"},
@@ -23,6 +25,7 @@ router = APIRouter(prefix = "/api/missions", tags = ["mission"])
 async def analyze_missions_judge(
     req: MissionAnalysisRequest,
 ):
+    logger.info(f"[/api/missions/judge] 요청 수신: {req.model_dump()}")
     try:
         # 비동기 방식으로 모든 미션을 병렬 처리
         results = await analyze_async(req.missions)

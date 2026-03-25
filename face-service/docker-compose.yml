@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  face-service:
+    image: daengmap/facial-expression-analyze-ai:latest
+    container_name: face-service
+    restart: unless-stopped
+    ports:
+      - "8100:8100"
+    env_file:
+      - .env
+    volumes:
+      - face-models:/app/models
+
+volumes:
+  face-models:

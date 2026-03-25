@@ -1,11 +1,13 @@
 # app/routers/vetchat_router.py
 from __future__ import annotations
 
+import logging
 from fastapi import APIRouter
 
 from app.schemas.vetchat_schema import VetChatRequest, VetChatResponse
 from app.services.vetchat_service import chat_async
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/vet", tags=["vetchat"])
 
 
@@ -15,4 +17,5 @@ async def vet_chat(req: VetChatRequest) -> VetChatResponse:
     Backend → Orchestrator 내부 챗봇 상담 엔드포인트 (비동기).
     Orchestrator는 chatbot-service에 요청을 위임하고 결과를 반환합니다.
     """
+    logger.info(f"[/api/vet/chat] 요청 수신: {req.model_dump()}")
     return await chat_async(req)

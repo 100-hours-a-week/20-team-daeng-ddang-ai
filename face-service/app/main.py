@@ -211,6 +211,7 @@ async def analyze_face(req: FaceAnalyzeRequest) -> FaceAnalyzeResponse:
         raise HTTPException(status_code=503, detail="Face Analyzer not initialized")
     
     req_id = req.analysis_id or "req_unknown"
+    logger.info(f"[{req_id}] 분석 요청 수신: {req.model_dump()}")
     try:
         # 분석 작업은 CPU/IO 집중적이므로 쓰레드 풀로 오프로드
         return await run_in_threadpool(current_analyzer.analyze, req_id, req)
